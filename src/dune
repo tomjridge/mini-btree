@@ -1,0 +1,6 @@
+(library
+ (public_name "mini-btree")
+ (name "mini_btree") ;; hyphens not allowed in lib names
+ (libraries lwt)
+)
+
