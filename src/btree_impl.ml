@@ -293,7 +293,11 @@ end
 
 (* module X = Make_leaf_branch *)
 
+
+
+
 (** Combine Make_1 with Make_leaf_branch *)
+
 module Make_2(S:S_kvr) 
   :
     sig
@@ -354,4 +358,31 @@ struct
     let module B = Make(A) in
     B.btree_ops
 
+end
+
+
+(** Example with k,v=int,int ... with blk_sz coded as 4096, and
+   assumed 10 bytes per int to marshall *)
+module Example_int_int = struct
+
+  let blk_sz = 4096
+
+  module S (* : S_kvr *) = struct
+    type k = int
+    type v = int
+    type r = int
+    let k_cmp = {k_cmp=Int.compare}
+
+    let bytes_per_int = 10 (* over estimate *)
+
+    let constants = { 
+      max_leaf_keys   = blk_sz/(2*bytes_per_int); 
+      max_branch_keys = blk_sz/(2*bytes_per_int) }
+  end
+  
+  include S
+
+  include Make_2(S)
+
+  let make : store:(r, node) store_ops -> alloc:(unit -> r m) -> (k, v, r) btree_ops = make  
 end
