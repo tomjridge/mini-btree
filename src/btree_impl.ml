@@ -298,19 +298,20 @@ module Make_2(S:S_kvr)
   :
     sig
       open S
+
+      (* Leaf, branch implementations *)
       type leaf
       type branch
       type node
       val leaf : (k, v, leaf) leaf_ops
       val branch : (k, r, branch) branch_ops
       val node : (branch, leaf, node) node_ops
-      module Make :
-        functor
-          (T : sig
-             val store : (r, node) store_ops
-             val alloc : unit -> r m
-           end)
-          -> sig val btree_ops : (k, v, r) btree_ops end
+
+      (* Make function *)
+      val make : 
+        store : (r, node) store_ops -> 
+        alloc : (unit -> r m) -> 
+        (k, v, r) btree_ops
     end
 = 
 struct
@@ -347,4 +348,10 @@ struct
     let btree_ops : (k,v,r) btree_ops = btree_ops
 
   end
+
+  let make ~store ~alloc =
+    let module A = struct let store=store let alloc=alloc end in
+    let module B = Make(A) in
+    B.btree_ops
+
 end
