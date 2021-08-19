@@ -262,16 +262,92 @@ struct
 
   (** Branch implementation *)
 
+  (** A branch is implemented as a map from k option to r; None is
+     always in the map; None < Some k; we use Base.Map because it has
+     a slightly more extensive API which suits our purpose here *)
+
+  
+
+
   module K' = struct 
     type t = k option 
     let compare = Base.Option.compare k_cmp.k_cmp 
+    (* ASSUMES Base.Option.compare places None < Some k *)
+
+    let sexp_of_t: t -> Base.Sexp.t = failwith "not implemented"
+    (** ASSUMES this function is never called in our usecases *)
   end
 
-  module Map_k' = Map.Make(K')
+  module C = struct
+    type t = K'.t
+    include Base.Comparator.Make(K')
+  end
 
-  type branch = r Map_k'.t ref (* also mutable *)
+  let comparator : _ Base.Map.comparator = (module C)
 
-  let branch : _ branch_ops = failwith "FIXME"
+  module Map = Base.Map
+
+  type branch = (k,r,C.comparator_witness) Map.t ref (* also mutable *)
+
+  (* this primed version works with k options *)
+  let to_krs' b : k option list * r list = 
+    b |> Map.to_alist |> function
+    | [] -> failwith "to_krs: branch must contain a mapping for None"
+    | (k,r)::krs -> 
+      assert(k=None);
+      List.split krs |> fun (ks,rs) -> 
+      (ks,r::rs)
+
+  let to_krs b : k list * r list = 
+    to_krs' b |> fun (ks,rs) -> 
+    List.map dest_Some ks,rs
+
+  let _ = to_krs
+
+  let of_krs' krs = 
+    let (ks,rs) = krs in
+    assert(List.length ks +1 = List.length rs);
+    List.combine (None::ks) rs |> fun krs -> 
+    krs |> Map.of_alist_exn comparator
+
+  let of_krs (ks,rs) = of_krs' (List.map (fun x -> Some x) ks,rs)
+
+  let find k b : k option * r * k option = 
+    (* find the greatest key <= k *)
+    Map.closest_key b `Less_or_equal_to (Some k) |> function
+    | None -> 
+      assert(Map.mem b None);
+      failwith "find: impossible"
+    | Some (k1,r) -> 
+      Map.closest_key b `Greater_than (Some k) |> function
+      | None -> (k1,r,None)
+      | Some(k2,_) -> (k1,r,k2)
+
+  (* NOTE A bit inefficient *)
+  let split_branch i b : _ Map.t * k * _ Map.t = 
+    b |> Map.to_alist |> fun krs -> 
+    Base.List.split_n krs i |> fun (xs,ys) ->
+    let (ks1,rs1) = match xs with
+      | (None,r)::rest -> 
+        let ks,rs = List.split rest in
+        (ks,r::rs)
+      | _ -> failwith "split_branch: xs"
+    in
+    match ys with
+    | (Some k,r)::krs -> 
+      List.split krs |> fun (ks2,rs2) -> 
+      of_krs' (ks1,rs1),k,(of_krs' (ks2,r::rs2))
+    | _ -> failwith "split_branch:ys"
+  
+  let branch : _ branch_ops = {
+    find;
+    branch_nkeys=(fun b -> Map.length b);
+    split_branch;
+    make_small_root=(fun (r1,k,r2) -> of_krs ([k],[r1;r2]));
+    to_krs;
+    of_krs;
+    replace;    
+  }
 
   (** Nodes *)
 

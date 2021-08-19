@@ -1,4 +1,5 @@
-(** An example instance using bin_prot for marshalling, and a backing file *)
+(** An example instance using bin_prot for marshalling, and a backing
+   file to store the nodes of the B-tree *)
 
 open Btree_intf
 

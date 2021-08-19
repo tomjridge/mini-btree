@@ -12,3 +12,7 @@
 let iter_k f (x:'a) =
   let rec k x = f ~k x in
   k x
+
+let dest_Some = function
+  | None -> failwith "dest_Some"
+  | Some x -> x
