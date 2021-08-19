@@ -287,7 +287,7 @@ struct
 
   module Map = Base.Map
 
-  type branch = (k,r,C.comparator_witness) Map.t ref (* also mutable *)
+  type branch = (k option,r,C.comparator_witness) Map.t ref (* also mutable *)
 
   (* this primed version works with k options *)
   let to_krs' b : k option list * r list = 
@@ -338,15 +338,19 @@ struct
       List.split krs |> fun (ks2,rs2) -> 
       of_krs' (ks1,rs1),k,(of_krs' (ks2,r::rs2))
     | _ -> failwith "split_branch:ys"
+
+  let replace _s1 _s2 b = 
+    b (* FIXME *)
   
   let branch : _ branch_ops = {
-    find;
-    branch_nkeys=(fun b -> Map.length b);
-    split_branch;
-    make_small_root=(fun (r1,k,r2) -> of_krs ([k],[r1;r2]));
-    to_krs;
-    of_krs;
-    replace;    
+    find=(fun k b -> find k !b);
+    branch_nkeys=(fun b -> Map.length !b);
+    split_branch=(fun i b -> split_branch i !b |> fun (a,b,c) -> (ref a,b,ref c));
+    make_small_root=(fun (r1,k,r2) -> of_krs ([k],[r1;r2]) |> ref);
+    to_krs=(fun b -> to_krs !b);
+    of_krs=(fun krs -> of_krs krs |> ref);
+    replace=(fun s1 s2 b -> 
+        replace s1 s2 !b |> fun b' -> b:=b');    
   }
 
   (** Nodes *)
@@ -366,9 +370,6 @@ struct
     }
 
 end
-
-(* module X = Make_leaf_branch *)
-
 
 
 
