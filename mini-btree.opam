@@ -12,6 +12,7 @@ depends: [
   "ppx_jane"
   "lwt"
   "lwt.unix"
+  "bigstringaf"
   "odoc" {with-doc}
 ]
 build: [

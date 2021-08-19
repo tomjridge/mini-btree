@@ -56,16 +56,34 @@ type ('k,'r,'branch) branch_ops = {
 }
 
 type ('branch,'leaf,'node) node_ops = {
-(*  typ : 'node -> [ `Branch | `Leaf ];
-  dest_Branch : 'node -> 'branch;
-  dest_Leaf : 'node -> 'leaf; *)
   cases: 'a. 'node -> leaf:('leaf -> 'a) -> branch:('branch -> 'a) -> 'a;
   of_leaf: 'leaf -> 'node;
   of_branch: 'branch -> 'node;
 }
 
 
-type ('r,'node,'t) store_ops = {
+type ('r,'node) store_ops = {
   read : 'r -> 'node m;
   write : 'r -> 'node -> unit m;
+}
+
+
+
+type ('k,'v,'r) insert_many_return_type = 
+  ([ `Rebuilt of [ `New_root of 'r list * 'r | `Ok of 'r list ] * [`Remaining of ('k * 'v) list]
+   | `Remaining of ('k * 'v) list
+   | `Unchanged ]
+  )
+
+type ('k,'v,'r) btree_ops = {
+  find: r:'r -> k:'k -> 'v option m;
+
+  insert: k:'k -> v:'v -> r:'r -> [ `New_root of 'r list * 'r | `Ok of 'r list] m;
+
+  insert_many:
+    kvs:('k * 'v) list ->
+    r:'r ->
+    ('k,'v,'r) insert_many_return_type m;
+
+  delete: k:'k -> r:'r -> unit m
 }

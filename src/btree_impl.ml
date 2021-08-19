@@ -3,21 +3,22 @@
 open Util
 open Btree_intf
 
-module Make(S:sig
+
+(** Most abstract implementation *)
+module Make_1(S:sig
     type leaf
     type branch
     type node
     type k
     type v
     type r
-    type t
     val constants : constants
     val k_cmp     : k k_cmp
     val leaf      : (k,v,leaf)leaf_ops
     val branch    : (k,r,branch)branch_ops
     val node      : (branch,leaf,node)node_ops
-    val store     : (r,node,t)store_ops
-    val alloc     : unit -> 'r m
+    val store     : (r,node)store_ops
+    val alloc     : unit -> r m
   end) = struct
   open S
 
@@ -177,14 +178,11 @@ module Make(S:sig
         rebuild ~free:[r] ~sofar ~r1 ~k ~r2 >>= fun x -> 
         return (`Rebuilt (x,`Remaining remaining))
 
+
   let _ : 
     kvs:(k * v) list ->
     r:r ->
-    ([ `Rebuilt of [ `New_root of r list * r | `Ok of r list ] * [`Remaining of (k * v) list]
-     | `Remaining of (k * v) list
-     | `Unchanged ]
-     )
-      m= insert_many
+    (k,v,r) insert_many_return_type m= insert_many
 
       
       
@@ -200,4 +198,153 @@ module Make(S:sig
     leaf.remove k l;
     store.write r (node.of_leaf l)
 
+  (** The btree operations *)
+  let btree_ops = { find; insert; insert_many; delete }
+
+end
+
+
+
+(** Make implementations of leaf, branch and node *)
+
+module type S_kvr = sig
+  type k
+  type v
+  type r
+  val constants : constants
+  val k_cmp     : k k_cmp
+end
+
+
+module Make_leaf_branch(S:S_kvr) 
+  : sig
+    module S : S_kvr
+    open S
+    type leaf
+    type branch
+    type node
+    val leaf      : (k,v,leaf)leaf_ops
+    val branch    : (k,r,branch)branch_ops
+    val node      : (branch,leaf,node)node_ops
+  end with module S = S
+= 
+struct
+  module S = S
+  open S
+
+  (** Leaf implementation *)
+
+  module K = struct type t = k let compare = k_cmp.k_cmp end
+
+  module Map_k = Map.Make(K)
+
+  type leaf = v Map_k.t ref (* leaves are mutable *)
+
+  let of_kvs kvs = ref @@ Map_k.of_seq (List.to_seq kvs)
+
+  let to_kvs l = !l |> Map_k.bindings
+
+  let leaf : _ leaf_ops = {
+    lookup=(fun k l -> Map_k.find_opt k !l);
+    insert=(fun k v l -> l:=Map_k.add k v !l);
+    remove=(fun k l -> l:=Map_k.remove k !l);
+    leaf_nkeys=(fun l -> Map_k.cardinal !l);
+    split_leaf=(fun i l -> 
+        to_kvs l |> fun kvs -> 
+        Base.List.split_n kvs i |> fun (xs,ys) -> 
+        match ys with 
+        | [] -> failwith "split_leaf: ys is []"
+        | (k,_)::_ -> (of_kvs xs),k,(of_kvs ys));
+    to_kvs;
+    of_kvs;
+  }
+
+
+  (** Branch implementation *)
+
+  module K' = struct 
+    type t = k option 
+    let compare = Base.Option.compare k_cmp.k_cmp 
+  end
+
+  module Map_k' = Map.Make(K')
+
+  type branch = r Map_k'.t ref (* also mutable *)
+
+  let branch : _ branch_ops = failwith "FIXME"
+
+  (** Nodes *)
+
+  type node = Branch of branch | Leaf of leaf
+
+  let node : _ node_ops = 
+    let cases n ~leaf ~branch = 
+      match n with
+      | Leaf l -> leaf l
+      | Branch b -> branch b
+    in
+    {
+      cases;
+      of_leaf=(fun l -> Leaf l);
+      of_branch=(fun b -> Branch b)
+    }
+
+end
+
+(* module X = Make_leaf_branch *)
+
+(** Combine Make_1 with Make_leaf_branch *)
+module Make_2(S:S_kvr) 
+  :
+    sig
+      open S
+      type leaf
+      type branch
+      type node
+      val leaf : (k, v, leaf) leaf_ops
+      val branch : (k, r, branch) branch_ops
+      val node : (branch, leaf, node) node_ops
+      module Make :
+        functor
+          (T : sig
+             val store : (r, node) store_ops
+             val alloc : unit -> r m
+           end)
+          -> sig val btree_ops : (k, v, r) btree_ops end
+    end
+= 
+struct
+  open S
+  module Leaf_branch = Make_leaf_branch(S)
+  include Leaf_branch
+
+  (** T parameters typically provided at runtime *)
+  module Make
+      (T:sig 
+         val store     : (r,node)store_ops
+         val alloc     : unit -> r m
+       end) 
+    : 
+    sig
+      val btree_ops: (k,v,r)btree_ops
+    end
+  = 
+  struct
+
+    module S2 = struct
+      include S
+      type nonrec leaf = leaf
+      type nonrec branch = branch
+      type nonrec node = node
+      let leaf = leaf
+      let branch = branch
+      let node = node
+      include T
+    end
+
+    include Make_1(S2)
+
+    let btree_ops : (k,v,r) btree_ops = btree_ops
+
+  end
 end
