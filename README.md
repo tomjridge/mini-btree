@@ -2,7 +2,10 @@
 
 To run some examples: `make run_test`
 
-Sample test output [here](https://gist.github.com/tomjridge/e083a0e781189df4c4428c2da2cdc108)
+Sample test output
+[here](https://gist.github.com/tomjridge/e083a0e781189df4c4428c2da2cdc108)
+and (with cache, 1M individual inserts in 1.5s)
+[here](https://gist.github.com/tomjridge/9a244e14a3f84f9d2236b1510f76cc18)
 
 The interface for a B-tree with ints for keys and ints for values looks as:
 

@@ -1,6 +1,7 @@
 (** An example instance using bin_prot for marshalling, and a backing
    file to store the nodes of the B-tree *)
 
+open Util
 open Btree_intf
 
 type buf = bytes 
@@ -118,14 +119,25 @@ module Private_btree_on_file = struct
     mutable min_free_blk : int;
   } [@@deriving bin_io]   
 
+  type cache_entry = {
+    node          : E.node;
+    mutable dirty : bool
+  }
+
+  type cache = (E.r,cache_entry)Base.Hashtbl.t
+
+  let empty_cache () = Base.Hashtbl.create (module Base.Int)
+
   (* state type *)
   type t = {
-    fn        : string; (* filename *)
-    fd        : Lwt_unix.file_descr;
-    header    : header;
-    store_ops : (E.r,E.node) store_ops;
-    btree_ops : (E.k,E.v,E.r) btree_ops;
+    fn             : string; (* filename *)
+    fd             : Lwt_unix.file_descr;
+    header         : header;
+    uncached_store : (E.r,E.node) store_ops;
+    store_ops      : (E.r,E.node) store_ops;
+    btree_ops      : (E.k,E.v,E.r) btree_ops;
     mutable closed : bool;
+    cache          : cache
   }
 
   let write_blk_bytes fd n buf = 
@@ -168,17 +180,64 @@ module Private_btree_on_file = struct
     open S
     open E
     let blk_dev_ops = {read=read_blk_bytes fd;write=write_blk_bytes fd}
-    let store_ops = 
+    let uncached_store = 
       M.blk_dev_to_store ~blk_dev_ops ~leaf_ops:leaf ~branch_ops:branch ~node_ops:node
         ~blk_size:blk_sz 
   end
 
+  (** This is too simple: at the moment it caches every read and
+     write, and only goes to disk on a flush. OK for a demo but should
+     be replaced with an LRU or similar. *)
+  module Cached_store = struct
+
+    module Hashtbl = Base.Hashtbl
+    
+    let cache_store cache (store_ops:(E.r,E.node) store_ops) : _ store_ops = {
+      read=(fun r -> 
+          Hashtbl.find cache r |> function
+          | None -> 
+            store_ops.read r >>= fun node -> 
+            Hashtbl.set cache ~key:r ~data:{node;dirty=false};
+            return node
+          | Some e -> 
+            return e.node);
+      write=(fun r node -> 
+          (* NOTE if r this is already in the cache, then node should
+             be part of the corresponding entry *)
+          Base.Hashtbl.update cache r ~f:(function
+              | None -> { node; dirty=true }
+              | Some e -> 
+                (* assert(e.node==node); *)
+                { node=e.node; dirty=true });                
+          return ());    
+    }
+
+    let flush_cache cache (uncached_store : _ store_ops) = 
+      let dirties = ref [] in
+      Hashtbl.iteri cache ~f:(fun ~key ~data -> 
+          match data.dirty with 
+          | true -> 
+            data.dirty <- false;
+            dirties:=(key,data.node)::!dirties
+          | false -> ());
+      (* now do the writes *)
+      !dirties |> iter_k (fun ~k ds -> 
+          match ds with
+          | [] -> return ()
+          | (r,n)::rest -> 
+            uncached_store.write r n >>= fun () -> 
+            k rest)
+  end    
+
   module From_store(S:sig
-      val store_ops: (E.r,E.node) store_ops
+      val uncached_store: (E.r,E.node) store_ops
+      val cache : cache
       val header : header
     end) = struct
 
     open S
+
+    let store_ops = Cached_store.cache_store cache uncached_store
 
     let btree_ops : _ btree_ops = 
       make ~store:store_ops
@@ -201,17 +260,27 @@ module Private_btree_on_file = struct
     in
     H.write fd header >>= fun () -> 
     let open From_fd(struct let fd = fd end) in
-    let open From_store(struct let store_ops=store_ops let header=header end) in
+    let cache = empty_cache () in
+    let open From_store(struct 
+        let uncached_store=uncached_store
+        let header=header 
+        let cache=cache end) 
+    in
     store_ops.write 1 (node.of_leaf (leaf.of_kvs [])) >>= fun () -> 
-    return { fn;fd;header;store_ops;btree_ops;closed=false }
+    return { fn;fd;header;uncached_store;store_ops;btree_ops;closed=false;cache }
 
   (* To open, read header *)
   let open_ ~fn = 
     Lwt_unix.(openfile fn [O_RDWR] 0o640) >>= fun fd -> 
     H.read fd >>= fun header -> 
     let open From_fd(struct let fd = fd end) in    
-    let open From_store(struct let store_ops=store_ops let header=header end) in
-    return { fn;fd;header;store_ops;btree_ops;closed=false }
+    let cache = empty_cache () in
+    let open From_store(struct 
+        let uncached_store=uncached_store
+        let header=header 
+        let cache=cache end) 
+    in
+    return { fn;fd;header;uncached_store;store_ops;btree_ops;closed=false;cache }
 
   let find t k = 
     assert(not t.closed);
@@ -237,6 +306,7 @@ module Private_btree_on_file = struct
 
   (* To close, write header *)
   let close t = 
+    Cached_store.flush_cache t.cache t.uncached_store >>= fun () ->
     H.write t.fd t.header >>= fun () -> 
     Lwt_unix.close t.fd >>= fun () -> 
     t.closed <- true; return ()

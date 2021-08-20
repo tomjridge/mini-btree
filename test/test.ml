@@ -10,7 +10,7 @@ let fn = "test.btree"
 
 let run = Lwt_main.run
 
-let lim = 10_000
+let lim = 1_000_000
 
 let _ =
   match Sys.argv |> Array.to_list |> List.tl with
