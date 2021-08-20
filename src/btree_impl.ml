@@ -23,15 +23,19 @@ module Make_1(S:sig
   open S
 
   let find_leaf ~r ~k:k0 = 
+    trace "f1";
     let rec find_r ~sofar ~r =
+      trace "f2";
       store.read r >>= fun n -> 
+      trace "f3";
       find_n ~sofar ~r ~n
     and find_n ~sofar ~r ~n =
+      trace "f4";
       node.cases n
         ~leaf:(fun l -> return (sofar,r,l))
         ~branch:(fun b -> 
             let (k1,r1,k2) = branch.find k0 b in
-            find_r ~sofar:( (r,b,k1,r1,k2)::sofar ) ~r)
+            find_r ~sofar:( (r,b,k1,r1,k2)::sofar ) ~r:r1)
     in
     find_r ~sofar:[] ~r
 
@@ -77,13 +81,18 @@ module Make_1(S:sig
     branch.split_branch max_branch_keys b
 
   let insert ~rebuild ~k ~v ~r =
+    trace "in1";
     find_leaf ~r ~k >>= fun (sofar,r,l) -> 
+    trace "in1.5";
     leaf.insert k v l;
+    trace "in2";
     match leaf_is_large l with
     | false -> 
+      trace "in3";
       store.write r (node.of_leaf l) >>= fun () -> 
       return (`Ok [])
     | true -> 
+      trace "in4";
       split_large_leaf l |> fun (l1,k,l2) -> 
       alloc () >>= fun r1 -> 
       alloc () >>= fun r2 ->
@@ -130,7 +139,11 @@ module Make_1(S:sig
     r1:r -> k:k -> r2:r -> ([> `New_root of r list * r | `Ok of r list ]) m 
     = rebuild
 
-  let insert = insert ~rebuild
+  let insert ~k ~v ~r = 
+    trace "i1";
+    insert ~rebuild ~k ~v ~r >>= fun r -> 
+    trace "i2"; return r
+   
 
   let _ : k:k -> v:v -> r:r -> ([ `New_root of r list * r | `Ok of r list]) m = insert
 
@@ -246,12 +259,18 @@ struct
 
   let leaf : _ leaf_ops = {
     lookup=(fun k l -> Map_k.find_opt k !l);
-    insert=(fun k v l -> l:=Map_k.add k v !l);
+    insert=(fun k v l -> 
+        trace "li 1";
+        l:=Map_k.add k v !l;
+        trace "li 2"
+      );
     remove=(fun k l -> l:=Map_k.remove k !l);
     leaf_nkeys=(fun l -> Map_k.cardinal !l);
     split_leaf=(fun i l -> 
+        trace "sl1";
         to_kvs l |> fun kvs -> 
         Base.List.split_n kvs i |> fun (xs,ys) -> 
+        trace "sl2";
         match ys with 
         | [] -> failwith "split_leaf: ys is []"
         | (k,_)::_ -> (of_kvs xs),k,(of_kvs ys));
@@ -274,8 +293,9 @@ struct
     let compare = Base.Option.compare k_cmp.k_cmp 
     (* ASSUMES Base.Option.compare places None < Some k *)
 
-    let sexp_of_t: t -> Base.Sexp.t = failwith "not implemented"
-    (** ASSUMES this function is never called in our usecases *)
+    let sexp_of_t: t -> Base.Sexp.t = fun _ -> Base.Sexp.Atom __LOC__
+    (** ASSUMES this function is never called in our usecases; FIXME
+       it is called; how? *)
   end
 
   module C = struct

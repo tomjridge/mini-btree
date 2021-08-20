@@ -16,3 +16,8 @@ let iter_k f (x:'a) =
 let dest_Some = function
   | None -> failwith "dest_Some"
   | Some x -> x
+
+(* trace execution *)
+let trace _s = 
+  (* print_endline s *)
+  ()

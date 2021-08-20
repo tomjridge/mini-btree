@@ -235,7 +235,9 @@ module Private_btree_on_file = struct
     assert(not t.closed);
     t.btree_ops.delete ~k ~r:t.header.root
 
+  (* To close, write header *)
   let close t = 
+    H.write t.fd t.header >>= fun () -> 
     Lwt_unix.close t.fd >>= fun () -> 
     t.closed <- true; return ()
 

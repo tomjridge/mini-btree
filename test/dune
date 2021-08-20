@@ -1,0 +1,5 @@
+(executable
+ (name test)
+ (libraries mini-btree sexplib)
+ (preprocess (pps ppx_sexp_message))
+)
