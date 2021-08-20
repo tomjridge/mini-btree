@@ -12,6 +12,8 @@ run_test:
 	time ./test.exe create
 	time ./test.exe insert
 	time ./test.exe list
+	time ./test.exe delete
+	time ./test.exe list
 
 # for auto-completion of Makefile target
 clean::

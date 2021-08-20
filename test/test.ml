@@ -32,6 +32,20 @@ let _ =
       Btree.close t        
     in
     run f
+  | ["delete"] -> 
+    Printf.printf "Deleting some entries...\n";
+    let f = 
+      Btree.open_ ~fn >>= fun t -> 
+      100 |> iter_k (fun ~k:kont i -> 
+          match i >=200 with
+          | true -> return ()
+          | false -> 
+            trace (Printf.sprintf "deleting %d" i);
+            Btree.delete t i >>= fun () -> 
+            kont (i+1)) >>= fun () -> 
+      Btree.close t        
+    in
+    run f
   | ["list"] -> 
     Printf.printf "Listing first few entries (max 1000)...\n";
     (* list first few values *)
