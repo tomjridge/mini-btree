@@ -20,4 +20,4 @@ module Btree_on_file : sig
 end 
 ```
 
-(see `example.ml`)
+(see `example.ml`; the monad is just `'a Lwt.t`, renamed to `'a m`)
