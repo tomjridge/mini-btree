@@ -19,7 +19,7 @@ let _ =
     let f = Btree.create ~fn >>= fun t -> Btree.close t in
     run f end
   | ["insert"] -> 
-    Printf.printf "Inserting...\n";
+    Printf.printf "Inserting %d entries...\n" lim;
     let f = 
       Btree.open_ ~fn >>= fun t -> 
       1 |> iter_k (fun ~k:kont i -> 
@@ -33,7 +33,7 @@ let _ =
     in
     run f
   | ["list"] -> 
-    Printf.printf "Listing...\n";
+    Printf.printf "Listing first few entries (max 1000)...\n";
     (* list first few values *)
     let f = 
       Btree.open_ ~fn >>= fun t -> 
