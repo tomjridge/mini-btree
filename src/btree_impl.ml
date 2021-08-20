@@ -339,8 +339,27 @@ struct
       of_krs' (ks1,rs1),k,(of_krs' (ks2,r::rs2))
     | _ -> failwith "split_branch:ys"
 
-  let replace _s1 _s2 b = 
-    b (* FIXME *)
+  let replace (s1:(k,r) segment) (s2:(k,r)segment) b = 
+    let (k,_r,krs,_) = s1 in
+    let (k',r',krs',_) = s2 in
+    assert(K'.compare k k' = 0);
+    (* also, k maps to r etc *)
+    (* remove old *)
+    (krs,b) |> iter_k (fun ~k:kont (krs,b) -> 
+        match krs with
+        | [] -> b
+        | (k,_r)::krs -> 
+          kont (krs,Map.remove b (Some k)))
+    |> fun b -> 
+    (* add new *)
+    let new_ = (k',r')::(List.map (fun (k,r) -> (Some k,r)) krs') in
+    (new_,b) |> iter_k (fun ~k:kont (krs,b) -> 
+        match krs with
+        | [] -> b
+        | (k,r)::krs -> 
+          kont (krs,Map.set b ~key:k ~data:r))
+    |> fun b -> 
+    b
   
   let branch : _ branch_ops = {
     find=(fun k b -> find k !b);
@@ -395,6 +414,7 @@ module Make_2(S:S_kvr)
         (k, v, r) btree_ops
     end
 = 
+(* ignore following - the above sig is what matters *)
 struct
   open S
   module Leaf_branch = Make_leaf_branch(S)
