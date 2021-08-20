@@ -90,22 +90,166 @@ module Marshalling_with_bin_prot(
 
 end
 
+module Marshalling_int_int = Marshalling_with_bin_prot(struct
+    open Bin_prot.Std
+    type k = int[@@deriving bin_io]
+    type v = int[@@deriving bin_io]
+    type r = int[@@deriving bin_io]
+  end)
+
 (** Simple example, where we store the B-tree blocks in a file *)
-module Btree_on_file = struct
+module Private_btree_on_file = struct
+
+  module M = Marshalling_int_int
+
+  open struct
+    module B = Btree_impl
+    module E = Btree_impl.Example_int_int
+  end
+
+  let blk_sz = E.blk_sz
+                 
+  let make = E.make
+
+  open Bin_prot.Std
+
+  type header = {
+    mutable root: E.r;
+    mutable min_free_blk : int;
+  } [@@deriving bin_io]   
+
+  (* state type *)
+  type t = {
+    fn        : string; (* filename *)
+    fd        : Lwt_unix.file_descr;
+    header    : header;
+    store_ops : (E.r,E.node) store_ops;
+    btree_ops : (E.k,E.v,E.r) btree_ops;
+    mutable closed : bool;
+  }
+
+  let write_blk_bytes fd n buf = 
+    assert(Bytes.length buf = blk_sz);
+    let file_offset = blk_sz * n in
+    Lwt_unix.pwrite fd buf ~file_offset 0 (* buf off *) blk_sz (* len *) >>= fun x -> 
+    assert(blk_sz=x); (* FIXME maybe it isn't... so write again *)
+    return ()
+
+  let write_blk_ba fd n ba =
+    write_blk_bytes fd n (ba_to_bytes ba)
+
+  let read_blk_bytes fd n =
+    let file_offset = blk_sz * n in
+    let buf = Bytes.create blk_sz in
+    Lwt_unix.pread fd buf ~file_offset 0 (* buf off *) blk_sz (* len *) >>= fun x -> 
+    assert(blk_sz=x);
+    return buf
+
+  let read_blk_ba fd n = 
+    read_blk_bytes fd n >>= fun buf -> 
+    return (bytes_to_ba buf)
+    
+    
+  (* Header block, always written to blk 0 *)
+  module H = struct
+    let write fd h = 
+      let ba = Bigstringaf.create blk_sz in (* ASSUMES header fits in blk *)
+      ignore(bin_write_header ba ~pos:0 h);
+      write_blk_ba fd 0 ba 
+
+    let read fd = 
+      read_blk_ba fd 0 >>= fun ba -> 
+      bin_read_header ba ~pos_ref:(ref 0) |> return
+  end
+  
+  module From_fd(S:sig
+      val fd: Lwt_unix.file_descr
+    end) = struct
+    open S
+    open E
+    let blk_dev_ops = {read=read_blk_bytes fd;write=write_blk_bytes fd}
+    let store_ops = 
+      M.blk_dev_to_store ~blk_dev_ops ~leaf_ops:leaf ~branch_ops:branch ~node_ops:node
+        ~blk_size:blk_sz 
+  end
+
+  module From_store(S:sig
+      val store_ops: (E.r,E.node) store_ops
+      val header : header
+    end) = struct
+
+    open S
+
+    let btree_ops : _ btree_ops = 
+      make ~store:store_ops
+        ~alloc:(fun () -> 
+            let x = header.min_free_blk in
+            header.min_free_blk <- x+1;
+            return x)    
+  end
+                      
+
+  (* To create: initialize file; write header block to blk 0, write
+     empty leaf to blk 1 *)
+  let create ~fn = 
+    let open E in
+    Lwt_unix.(openfile fn [O_CREAT;O_RDWR; O_TRUNC] 0o640) >>= fun fd -> 
+    let header = {
+      root=1;
+      min_free_blk=2 
+    }
+    in
+    H.write fd header >>= fun () -> 
+    let open From_fd(struct let fd = fd end) in
+    let open From_store(struct let store_ops=store_ops let header=header end) in
+    store_ops.write 1 (node.of_leaf (leaf.of_kvs [])) >>= fun () -> 
+    return { fn;fd;header;store_ops;btree_ops;closed=false }
+
+  (* To open, read header *)
+  let open_ ~fn = 
+    Lwt_unix.(openfile fn [O_RDWR] 0o640) >>= fun fd -> 
+    H.read fd >>= fun header -> 
+    let open From_fd(struct let fd = fd end) in    
+    let open From_store(struct let store_ops=store_ops let header=header end) in
+    return { fn;fd;header;store_ops;btree_ops;closed=false }
+
+  let find t k = 
+    assert(not t.closed);
+    t.btree_ops.find ~r:t.header.root ~k
+
+  let insert t k v = 
+    assert(not t.closed);
+    t.btree_ops.insert ~k ~v ~r:t.header.root >>= function
+      | `New_root (_to_free,r) -> (t.header.root <- r; return ())
+      | `Ok _to_free -> return ()
+
+  let insert_many t kvs = 
+    assert(not t.closed);
+    t.btree_ops.insert_many ~kvs ~r:t.header.root >>= function
+    | `Rebuilt(`New_root(_,r),`Remaining kvs) -> (t.header.root <- r; return kvs)
+    | `Rebuilt(`Ok _,`Remaining kvs) -> return kvs
+    | `Remaining kvs -> return kvs
+    | `Unchanged -> return []
+
+  let delete t k = 
+    assert(not t.closed);
+    t.btree_ops.delete ~k ~r:t.header.root
+
+  let close t = 
+    Lwt_unix.close t.fd >>= fun () -> 
+    t.closed <- true; return ()
 
 end
 
-
-(*
-module K = struct
-  type t = int[@@deriving bin_io]
+module Btree_on_file : sig
+  type t
+  val create      : fn:string -> t m
+  val open_       : fn:string -> t m
+  val find        : t -> int -> int option m
+  val insert      : t -> int -> int -> unit m
+  val insert_many : t -> (int * int) list -> (int * int) list m
+  val delete      : t -> int -> unit m
+  val close       : t -> unit m
+end = struct 
+  include Private_btree_on_file
 end
-
-module V = struct
-  type t = int[@@deriving bin_io]
-end
-
-module R = struct
-  type t = int[@@deriving bin_io]
-end
-*)

@@ -74,6 +74,7 @@ type ('k,'v,'r) insert_many_return_type =
    | `Remaining of ('k * 'v) list
    | `Unchanged ]
   )
+  (* FIXME this return type; eg Unchanged misnamed *)
 
 type ('k,'v,'r) btree_ops = {
   find: r:'r -> k:'k -> 'v option m;

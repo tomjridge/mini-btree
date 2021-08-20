@@ -465,16 +465,18 @@ module Example_int_int = struct
   let blk_sz = 4096
 
   module S (* : S_kvr *) = struct
+    open Bin_prot.Std
     type k = int
     type v = int
-    type r = int
+    type r = int[@@deriving bin_io]
     let k_cmp = {k_cmp=Int.compare}
 
     let bytes_per_int = 10 (* over estimate *)
 
+    (* NOTE subtract bytes_per_int for the tag *)
     let constants = { 
-      max_leaf_keys   = blk_sz/(2*bytes_per_int); 
-      max_branch_keys = blk_sz/(2*bytes_per_int) }
+      max_leaf_keys   = (blk_sz - bytes_per_int)/(2*bytes_per_int); 
+      max_branch_keys = (blk_sz - bytes_per_int)/(2*bytes_per_int) }
   end
   
   include S
