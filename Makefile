@@ -9,9 +9,9 @@ run_test:
 	dune build test/test.exe	
 	rm -f ./test.exe ./test.btree
 	cp _build/default/test/test.exe .
-	./test.exe create
-	./test.exe insert
-	./test.exe list
+	time ./test.exe create
+	time ./test.exe insert
+	time ./test.exe list
 
 # for auto-completion of Makefile target
 clean::

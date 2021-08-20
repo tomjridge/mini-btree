@@ -38,7 +38,7 @@ let _ =
     let f = 
       Btree.open_ ~fn >>= fun t -> 
       (1,[]) |> iter_k (fun ~k:kont (i,xs) -> 
-          match i > lim with
+          match i > min lim 1000 with
           | true -> return xs
           | false -> 
             Btree.find t i >>= function
