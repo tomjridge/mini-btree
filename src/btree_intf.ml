@@ -68,18 +68,19 @@ type ('r,'node) store_ops = {
 }
 
 
+type 'r free = { free: 'r list }[@@inline]
+
+type 'r new_root = { new_root: 'r }[@@inline]
 
 type ('k,'v,'r) insert_many_return_type = 
-  ([ `Rebuilt of [ `New_root of 'r list * 'r | `Ok of 'r list ] * [`Remaining of ('k * 'v) list]
-   | `Remaining of ('k * 'v) list
-   | `Unchanged ]
-  )
-  (* FIXME this return type; eg Unchanged misnamed *)
+  | Rebuilt of 'r free * 'r new_root option * ('k * 'v) list
+  | Remaining of ('k * 'v) list
+  | Unchanged_no_kvs
 
 type ('k,'v,'r) btree_ops = {
   find: r:'r -> k:'k -> 'v option m;
 
-  insert: k:'k -> v:'v -> r:'r -> [ `New_root of 'r list * 'r | `Ok of 'r list] m;
+  insert: k:'k -> v:'v -> r:'r -> ('r free * 'r new_root option) m;
 
   insert_many:
     kvs:('k * 'v) list ->

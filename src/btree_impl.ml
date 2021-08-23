@@ -90,7 +90,7 @@ module Make_1(S:sig
     | false -> 
       trace "in3";
       store.write r (node.of_leaf l) >>= fun () -> 
-      return (`Ok [])
+      return ({free=[]},None)
     | true -> 
       trace "in4";
       split_large_leaf l |> fun (l1,k,l2) -> 
@@ -117,14 +117,14 @@ module Make_1(S:sig
       alloc () >>= fun r -> 
       branch.make_small_root (r1,k,r2) |> fun b -> 
       store.write r (node.of_branch b) >>= fun () -> 
-      return (`New_root(free,r))
+      return ({free},Some {new_root=r})
     | (r3,b,k1,r4,k2)::sofar -> 
       branch.replace (k1,r4,[],k2) (k1,r1,[(k,r2)],k2) b;
       match branch_is_large b with
       | false -> 
         (* FIXME we want to have a new node every point to the root *)
         store.write r3 (node.of_branch b) >>= fun () -> 
-        return (`Ok free)
+        return ({free},None)
       | true -> 
         (* need to split again *)
         split_large_branch b |> fun (b1,k,b2) -> 
@@ -134,18 +134,18 @@ module Make_1(S:sig
         store.write r2 (node.of_branch b2) >>= fun () -> 
         rebuild ~free:(r3::free) ~sofar ~r1 ~k ~r2
 
-  let _ : free:r list ->
-    sofar:(r * branch * k option * r * k option) list ->
-    r1:r -> k:k -> r2:r -> ([> `New_root of r list * r | `Ok of r list ]) m 
+  let _ : 
+free:r list ->
+sofar:(r * branch * k option * r * k option) list ->
+r1:r -> k:k -> r2:r -> (r free * r new_root option) m
     = rebuild
 
   let insert ~k ~v ~r = 
     trace "i1";
     insert ~rebuild ~k ~v ~r >>= fun r -> 
     trace "i2"; return r
-   
 
-  let _ : k:k -> v:v -> r:r -> ([ `New_root of r list * r | `Ok of r list]) m = insert
+  let _ : k:k -> v:v -> r:r -> (r free * r new_root option) m = insert
 
   let k_lt,k_leq = (k_lt ~k_cmp, k_leq ~k_cmp)
 
@@ -160,7 +160,7 @@ module Make_1(S:sig
      the performance advantage) *)
   let insert_many ~kvs ~r = 
     match kvs with
-    | [] -> return `Unchanged
+    | [] -> return Unchanged_no_kvs
     | (k,v)::kvs -> 
       find_leaf ~r ~k >>= fun (sofar,r,l) -> 
       let (lo,hi) = bounds sofar in
@@ -181,15 +181,15 @@ module Make_1(S:sig
       match leaf_is_large l with
       | false -> 
         store.write r (node.of_leaf l) >>= fun () -> 
-        return (`Remaining remaining)
+        return (Remaining remaining)
       | true -> 
         split_large_leaf l |> fun (l1,k,l2) -> 
         alloc () >>= fun r1 -> 
         alloc () >>= fun r2 ->
         store.write r1 (node.of_leaf l1) >>= fun () -> 
         store.write r2 (node.of_leaf l2) >>= fun () -> 
-        rebuild ~free:[r] ~sofar ~r1 ~k ~r2 >>= fun x -> 
-        return (`Rebuilt (x,`Remaining remaining))
+        rebuild ~free:[r] ~sofar ~r1 ~k ~r2 >>= fun (free,new_root_opt) -> 
+        return (Rebuilt (free,new_root_opt,remaining))
 
 
   let _ : 

@@ -288,17 +288,23 @@ module Private_btree_on_file = struct
 
   let insert t k v = 
     assert(not t.closed);
-    t.btree_ops.insert ~k ~v ~r:t.header.root >>= function
-      | `New_root (_to_free,r) -> (t.header.root <- r; return ())
-      | `Ok _to_free -> return ()
+    t.btree_ops.insert ~k ~v ~r:t.header.root >>= fun (_free,new_root_o) -> 
+    match new_root_o with
+    | Some {new_root} -> (t.header.root <- new_root; return ())
+    | None -> return ()
+  (* NOTE we don't use free at this point, but in reality we should
+     probably return the blocks to the freelist *)
 
   let insert_many t kvs = 
     assert(not t.closed);
     t.btree_ops.insert_many ~kvs ~r:t.header.root >>= function
-    | `Rebuilt(`New_root(_,r),`Remaining kvs) -> (t.header.root <- r; return kvs)
-    | `Rebuilt(`Ok _,`Remaining kvs) -> return kvs
-    | `Remaining kvs -> return kvs
-    | `Unchanged -> return []
+    | Rebuilt(_free,new_root_o,kvs) -> (
+        (* NOTE again we don't use free at this point *)
+        match new_root_o with
+        | Some {new_root} -> (t.header.root <- new_root; return kvs)
+        | None -> return kvs)
+    | Remaining kvs -> return kvs
+    | Unchanged_no_kvs -> return []
 
   let delete t k = 
     assert(not t.closed);
