@@ -12,6 +12,8 @@ let run = Lwt_main.run
 
 let lim = 1_000_000
 
+let insert_many_size = 1000
+
 let _ =
   match Sys.argv |> Array.to_list |> List.tl with
   | ["create"] -> begin
@@ -32,6 +34,30 @@ let _ =
       Btree.close t        
     in
     run f
+
+  | ["insert_many"] -> 
+    Printf.printf "Inserting_many %d entries...\n" lim;
+    let f = 
+      Btree.open_ ~fn >>= fun t -> 
+      1 |> iter_k (fun ~k:kont i -> 
+          match i > lim with
+          | true -> return ()
+          | false -> 
+            trace (Printf.sprintf "inserting %d" i);
+            let j = min (i+insert_many_size) lim in
+            let ks = Base.List.range i j in
+            let kvs = List.map (fun x -> (x,2*x)) ks in
+            kvs |> iter_k (fun ~k:kont2 kvs -> 
+                match kvs with
+                | [] -> return ()
+                | _ -> 
+                  Btree.insert_many t kvs >>= fun kvs -> 
+                  kont2 kvs) >>= fun () -> 
+            kont j) >>= fun () -> 
+      Btree.close t        
+    in
+    run f
+
   | ["delete"] -> 
     Printf.printf "Deleting some entries...\n";
     let f = 
