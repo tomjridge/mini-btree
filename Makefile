@@ -10,8 +10,8 @@ run_test:
 	rm -f ./test.exe ./test.btree
 	cp _build/default/test/test.exe .
 	time ./test.exe create
-	time ./test.exe insert
-#	time ./test.exe insert_many
+#	time ./test.exe insert
+	time ./test.exe insert_many
 	time ./test.exe list
 	time ./test.exe delete
 	time ./test.exe list

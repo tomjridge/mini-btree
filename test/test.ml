@@ -44,8 +44,10 @@ let _ =
           | true -> return ()
           | false -> 
             trace (Printf.sprintf "inserting %d" i);
-            let j = min (i+insert_many_size) lim in
-            let ks = Base.List.range i j in
+            (* NOTE we want to include lim, so go upto lim+1 *)
+            let j = min (i+insert_many_size) (lim+1) in            
+            assert(j>i);
+            let ks = Base.List.range i j in            
             let kvs = List.map (fun x -> (x,2*x)) ks in
             kvs |> iter_k (fun ~k:kont2 kvs -> 
                 match kvs with
