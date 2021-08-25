@@ -8,6 +8,18 @@ type constants = {
   max_branch_keys : int;
 }
 
+(** Calculate constants given blk size and k and v size. NOTE assumes type r = int *)
+let make_constants ~blk_sz ~k_sz ~v_sz = 
+  let bytes_per_int = 10 in (* over estimate *)
+  let r_sz = bytes_per_int in
+  (* NOTE subtract bytes_per_int for the tag *)
+  let constants = { 
+    max_leaf_keys   = (blk_sz - bytes_per_int)/(2*(k_sz+r_sz)); 
+    max_branch_keys = (blk_sz - bytes_per_int)/(2*(k_sz+v_sz)) 
+  }
+  in
+  constants
+
 type 'k k_cmp = {
   k_cmp: 'k -> 'k -> int
 }
@@ -67,7 +79,6 @@ type ('r,'node) store_ops = {
   write : 'r -> 'node -> unit m;
 }
 
-
 type 'r free = { free: 'r list }[@@inline]
 
 type 'r new_root = { new_root: 'r }[@@inline]
@@ -89,3 +100,53 @@ type ('k,'v,'r) btree_ops = {
 
   delete: k:'k -> r:'r -> unit m
 }
+
+
+(** What we need to construct the B-tree *)
+module type S_kvr = sig
+  type k
+  type v
+  type r
+  val constants : constants
+  val k_cmp     : k k_cmp
+end
+
+(** What we get after constructing the B-tree *)
+module type T = sig
+  type k
+  type v
+  type r
+  (* Leaf, branch implementations *)
+  type leaf
+  type branch
+  type node
+  val leaf : (k, v, leaf) leaf_ops
+  val branch : (k, r, branch) branch_ops
+  val node : (branch, leaf, node) node_ops
+
+  (* Make function *)
+  val make : 
+    store : (r, node) store_ops -> 
+    alloc : (unit -> r m) -> 
+    (k, v, r) btree_ops
+end
+
+(** Type of the make functor *)
+module type MAKE = functor (S:S_kvr) -> T with type k=S.k and type v=S.v and type r=S.r
+
+
+let blk_sz_4096 = 4096
+
+(** Example, k=int, v=int, r=int *)
+module Int_int = struct
+  let blk_sz = blk_sz_4096
+  type k = int
+  type v = int
+  type r = int
+  let k_cmp = {k_cmp=Int.compare}
+
+  (* NOTE 10 is max size of marshalled int *)
+  let constants = make_constants ~blk_sz ~k_sz:10 ~v_sz:10
+end
+
+module type EXAMPLE_INT_INT = T with type k=int and type v=int and type r=int

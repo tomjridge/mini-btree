@@ -24,3 +24,6 @@ end
 ```
 
 (see `example.ml`; the monad is just `'a Lwt.t`, renamed to `'a m`)
+
+
+Docs may be found [here](tomjridge.github.io/ocamldocs/mini-btree/index.html)

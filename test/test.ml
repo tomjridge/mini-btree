@@ -10,7 +10,7 @@ let fn = "test.btree"
 
 let run = Lwt_main.run
 
-let lim = 1_000_000
+let lim = 10_000_000
 
 let insert_many_size = 1000
 

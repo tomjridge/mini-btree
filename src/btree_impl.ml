@@ -1,7 +1,7 @@
 (** B-tree implementation *)
 
 open Util
-open Btree_intf
+open Btree_impl_intf
 
 
 (** Most abstract implementation *)
@@ -231,7 +231,7 @@ end
 
 module Make_leaf_branch(S:S_kvr) 
   : sig
-    module S : S_kvr
+    module S:S_kvr
     open S
     type leaf
     type branch
@@ -407,8 +407,8 @@ struct
       of_leaf=(fun l -> Leaf l);
       of_branch=(fun b -> Branch b)
     }
-
 end
+
 
 
 
@@ -416,29 +416,37 @@ end
 
 module Make_2(S:S_kvr) 
   :
-    sig
-      open S
+  sig
+    type k=S.k
+    type v=S.v
+    type r=S.r
+    (* Leaf, branch implementations *)
+    type leaf
+    type branch
+    type node
+    val leaf : (k, v, leaf) leaf_ops
+    val branch : (k, r, branch) branch_ops
+    val node : (branch, leaf, node) node_ops
 
-      (* Leaf, branch implementations *)
-      type leaf
-      type branch
-      type node
-      val leaf : (k, v, leaf) leaf_ops
-      val branch : (k, r, branch) branch_ops
-      val node : (branch, leaf, node) node_ops
-
-      (* Make function *)
-      val make : 
-        store : (r, node) store_ops -> 
-        alloc : (unit -> r m) -> 
-        (k, v, r) btree_ops
-    end
+    (* Make function *)
+    val make : 
+      store : (r, node) store_ops -> 
+      alloc : (unit -> r m) -> 
+      (k, v, r) btree_ops
+  end 
 = 
 (* ignore following - the above sig is what matters *)
 struct
-  open S
+  (* open S *)
+  type k=S.k
+  type v=S.v
+  type r=S.r
+
   module Leaf_branch = Make_leaf_branch(S)
-  include Leaf_branch
+  type leaf = Leaf_branch.leaf
+  type branch = Leaf_branch.branch
+  type node = Leaf_branch.node
+  let leaf,branch,node = Leaf_branch.(leaf,branch,node)
 
   (** T parameters typically provided at runtime *)
   module Make
@@ -477,31 +485,12 @@ struct
 
 end
 
+module Make : MAKE = Make_2
+
+
 
 (** Example with k,v=int,int ... with blk_sz coded as 4096, and
    assumed 10 bytes per int to marshall *)
-module Example_int_int = struct
+module Example_int_int = Make(Btree_impl_intf.Int_int)
 
-  let blk_sz = 4096
-
-  module S (* : S_kvr *) = struct
-    open Bin_prot.Std
-    type k = int
-    type v = int
-    type r = int[@@deriving bin_io]
-    let k_cmp = {k_cmp=Int.compare}
-
-    let bytes_per_int = 10 (* over estimate *)
-
-    (* NOTE subtract bytes_per_int for the tag *)
-    let constants = { 
-      max_leaf_keys   = (blk_sz - bytes_per_int)/(2*bytes_per_int); 
-      max_branch_keys = (blk_sz - bytes_per_int)/(2*bytes_per_int) }
-  end
-  
-  include S
-
-  include Make_2(S)
-
-  let make : store:(r, node) store_ops -> alloc:(unit -> r m) -> (k, v, r) btree_ops = make  
-end
+module X : EXAMPLE_INT_INT = Example_int_int
