@@ -4,13 +4,13 @@ open Lwt
 open Mini_btree
 open Util
 
-module Btree = Example.Btree_on_file
+module Btree = Example_int_int
 
 let fn = "test.btree"
 
 let run = Lwt_main.run
 
-let lim = 10_000_000
+let lim = 1_000_000
 
 let insert_many_size = 1000
 
