@@ -1,6 +1,9 @@
 (** An example instance using bin_prot for marshalling, and a backing
    file+mmap to store the nodes of the B-tree *)
 
+(* FIXME it might still be worth caching to avoid repeated marshalling
+   of the leafs and nodes that are subsequently modified and
+   remarshalled *)
 open Btree_impl_intf
 
 (* module Intf = Make_intf *)
