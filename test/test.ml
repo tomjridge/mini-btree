@@ -4,7 +4,7 @@ open Lwt
 open Mini_btree
 open Util
 
-module Btree = Example_int_int
+module Btree = Example_int_int_mmap
 
 let fn = "test.btree"
 
