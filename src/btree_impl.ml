@@ -1,4 +1,4 @@
-(** B-tree implementation *)
+(** Core B-tree implementation *)
 
 open Util
 open Btree_impl_intf

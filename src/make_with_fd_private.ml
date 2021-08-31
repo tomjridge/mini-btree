@@ -1,7 +1,9 @@
-(** An example instance using bin_prot for marshalling, and a backing
-   file to store the nodes of the B-tree *)
+(** (Using file descriptor) An example instance using bin_prot for
+   marshalling, and a backing file to store the nodes of the B-tree *)
 
-open Util
+[@@@warning "-32-33"]
+
+(* open Util *)
 open Btree_impl_intf
 
 (* module Intf = Make_intf *)
@@ -13,12 +15,6 @@ type buf = bytes
     Bin_prot.Common has some useful blitting functions... also in
     Bigstringaf *)
 
-(** Provided by the underlying block device, via lwt pread/pwrite on a
-   file for example *)
-type 'r blk_dev_ops = {
-  read  : 'r -> buf m;
-  write : 'r -> buf -> unit m
-}
 
 
 module Prelude = struct
@@ -52,7 +48,7 @@ module Marshalling_with_bin_prot = struct
     [@@@warning "-26-27-32"]
 
     let blk_dev_to_store
-        ~(blk_dev_ops:r blk_dev_ops) 
+        ~(blk_dev_ops:(r,buf) Make_intf.blk_dev_ops) 
         ~(leaf_ops:_ leaf_ops) 
         ~(branch_ops:_ branch_ops) 
         ~(node_ops:_ node_ops) 
@@ -89,9 +85,11 @@ module Marshalling_with_bin_prot = struct
                 Branch (ks,rs) |> bin_write_node ba ~pos:0 |> fun _n -> 
                 blk_dev_ops.write r (ba|>ba_to_bytes))
 
+        let flush () = return ()
+
       end)
       in
-      ({read;write} : _ store_ops)
+      ({read;write;flush} : _ store_ops)
 
     let _ = blk_dev_to_store
 
@@ -182,12 +180,13 @@ module Btree_on_file = struct
         val fd: Lwt_unix.file_descr
       end) = struct
       open S
-      let blk_dev_ops = {read=read_blk_bytes fd;write=write_blk_bytes fd}
+      let blk_dev_ops = Make_intf.{read=read_blk_bytes fd;write=write_blk_bytes fd}
       let uncached_store = 
         M.blk_dev_to_store ~blk_dev_ops ~leaf_ops:leaf ~branch_ops:branch ~node_ops:node
           ~blk_size:blk_sz 
     end
 
+(*
     (** This is too simple: at the moment it caches every read and
         write, and only goes to disk on a flush. OK for a demo but should
         be replaced with an LRU or similar. *)
@@ -195,27 +194,7 @@ module Btree_on_file = struct
 
       module Hashtbl = Base.Hashtbl
 
-      let cache_store cache (store_ops:(r,node) store_ops) : _ store_ops = {
-        read=(fun r -> 
-            Hashtbl.find cache r |> function
-            | None -> 
-              store_ops.read r >>= fun node -> 
-              Hashtbl.set cache ~key:r ~data:{node;dirty=false};
-              return node
-            | Some e -> 
-              return e.node);
-        write=(fun r node -> 
-            (* NOTE if r this is already in the cache, then node should
-               be part of the corresponding entry *)
-            Base.Hashtbl.update cache r ~f:(function
-                | None -> { node; dirty=true }
-                | Some e -> 
-                  (* assert(e.node==node); *)
-                  { node=e.node; dirty=true });                
-            return ());    
-      }
-
-      let flush_cache cache (uncached_store : _ store_ops) = 
+      let flush_cache cache ~uncached_write = 
         let dirties = ref [] in
         Hashtbl.iteri cache ~f:(fun ~key ~data -> 
             match data.dirty with 
@@ -228,19 +207,46 @@ module Btree_on_file = struct
             match ds with
             | [] -> return ()
             | (r,n)::rest -> 
-              uncached_store.write r n >>= fun () -> 
+              write r n >>= fun () -> 
               k rest)
+
+      let cache_store cache (store_ops:(r,node) store_ops) : _ store_ops = 
+        let flush_cache = flush_cache cache store_ops in
+        in
+        {
+          read=(fun r -> 
+              Hashtbl.find cache r |> function
+              | None -> 
+                store_ops.read r >>= fun node -> 
+                Hashtbl.set cache ~key:r ~data:{node;dirty=false};
+                return node
+              | Some e -> 
+                return e.node);
+          write=(fun r node -> 
+              (* NOTE if r this is already in the cache, then node should
+                 be part of the corresponding entry *)
+              Base.Hashtbl.update cache r ~f:(function
+                  | None -> { node; dirty=true }
+                  | Some e -> 
+                    (* assert(e.node==node); *)
+                    { node=e.node; dirty=true });                
+              return ());
+          flush=(fun () -> fl
+        }
+
     end    
+*)
+(* FIXME add caching back in *)
 
     module From_store(S:sig
         val uncached_store: (r,node) store_ops
-        val cache : cache
+        (* val cache : cache *)
         val header : header
       end) = struct
 
       open S
 
-      let store_ops = Cached_store.cache_store cache uncached_store
+      let store_ops = (* Cached_store.cache_store cache *) uncached_store
 
       let btree_ops : _ btree_ops = 
         make ~store:store_ops
@@ -314,7 +320,7 @@ module Btree_on_file = struct
 
     (* To close, write header *)
     let close t = 
-      Cached_store.flush_cache t.cache t.uncached_store >>= fun () ->
+      (* Cached_store.flush_cache t.cache t.uncached_store >>= fun () -> FIXME add caching back *)
       H.write t.fd t.header >>= fun () -> 
       Lwt_unix.close t.fd >>= fun () -> 
       t.closed <- true; return ()

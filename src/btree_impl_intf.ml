@@ -77,6 +77,7 @@ type ('branch,'leaf,'node) node_ops = {
 type ('r,'node) store_ops = {
   read : 'r -> 'node m;
   write : 'r -> 'node -> unit m;
+  flush : unit -> unit m;
 }
 
 type 'r free = { free: 'r list }[@@inline]

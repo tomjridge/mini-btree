@@ -9,3 +9,23 @@ module Make_with_fd = Make.Make_with_fd
 module Make_with_mmap = Make.Make_with_mmap
 
 module Example_int_int_mmap = Make.Example_int_int_mmap
+
+
+module Private = struct
+  (** Most of the actual modules *)
+
+  module Btree_impl = Btree_impl
+
+  module Make = Make 
+
+  (* With fd *)
+  module Make_with_fd_private = Make_with_fd_private
+
+  (* With mmap *)
+  module Make_with_mmap_private = Make_with_mmap_private
+
+  (* Various mmap modules which we do not expose here *)
+
+  module Simple_cache = Simple_cache
+
+end

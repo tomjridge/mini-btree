@@ -28,7 +28,7 @@ module Make(S:sig
   end) 
 : T with type k = S.k and type v = S.v
 = struct
-  open S
+  (* open S *)
 
   type k = S.k
   type v = S.v
@@ -97,3 +97,4 @@ module Make(S:sig
         dirty
       end
 end
+

@@ -1,4 +1,4 @@
-(** An example instance using bin_prot for marshalling, and a backing
+(** (Using mmap) An example instance using bin_prot for marshalling, and a backing
    file+mmap to store the nodes of the B-tree *)
 
 (* FIXME it might still be worth caching to avoid repeated marshalling
@@ -15,12 +15,6 @@ type buf = Bigstringaf.t
 (** NOTE unlike using Lwt.pread,pwrite, we can use mmap's bigarray
    which fits in better with bin_prot. *)
 
-(** Provided by the underlying block device, via lwt pread/pwrite on a
-   file for example *)
-type 'r blk_dev_ops = {
-  read  : 'r -> buf m;
-  write : 'r -> buf -> unit m
-}
 
 
 (** Generic marshalling, arbitrary k,v,r *)
@@ -37,8 +31,8 @@ module Marshalling_with_bin_prot = struct
 
     [@@@warning "-26-27-32"]
 
-    let blk_dev_to_store
-        ~(blk_dev_ops:r blk_dev_ops) 
+    let blk_dev_to_store_uncached
+        ~(blk_dev_ops:(r,buf) Make_intf.blk_dev_ops) 
         ~(leaf_ops:_ leaf_ops) 
         ~(branch_ops:_ branch_ops) 
         ~(node_ops:_ node_ops) 
@@ -74,11 +68,30 @@ module Marshalling_with_bin_prot = struct
                 Branch (ks,rs) |> bin_write_node ba ~pos:0 |> fun _n -> 
                 blk_dev_ops.write r ba)
 
+        let flush () = return ()
       end)
       in
-      ({read;write} : _ store_ops)
+      ({read;write;flush} : _ store_ops)
 
-    let _ = blk_dev_to_store
+    let _ = blk_dev_to_store_uncached
+
+    let blk_dev_to_store_cached
+        ~(blk_dev_ops:(r,buf) Make_intf.blk_dev_ops) 
+        ~(leaf_ops:_ leaf_ops) 
+        ~(branch_ops:_ branch_ops) 
+        ~(node_ops:_ node_ops) 
+        ~blk_size
+      = 
+      blk_dev_to_store_uncached 
+        ~blk_dev_ops
+        ~leaf_ops
+        ~branch_ops
+        ~node_ops
+        ~blk_size
+      |> fun uncached_store_ops -> 
+      Make_util.add_cache ~uncached_store_ops
+
+    let blk_dev_to_store = blk_dev_to_store_cached
 
   end
 end
@@ -153,7 +166,7 @@ module Btree_on_mmap = struct
       end) = struct
       open S
       let mmap = Mmap_.of_fd fd
-      let blk_dev_ops = {read=read_blk mmap;write=write_blk mmap}
+      let blk_dev_ops = Make_intf.{read=read_blk mmap;write=write_blk mmap}
 
       (* NOTE uncached *)
       let store_ops = 
@@ -238,6 +251,7 @@ module Btree_on_mmap = struct
 
     (* To close, write header *)
     let close t = 
+      t.store_ops.flush () >>= fun () -> 
       H.write t.mmap t.header >>= fun () -> 
       Mmap_.close t.mmap; (* closes the underlying fd *)
       t.closed <- true; return ()

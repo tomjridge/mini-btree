@@ -34,3 +34,10 @@ end
 (** Type of the Make functor *)
 module type MAKE = functor (S:S) -> T with type k=S.k and type v=S.v 
 
+
+(** Provided by the underlying block device, via lwt pread/pwrite on a
+   file for example *)
+type ('r,'buf) blk_dev_ops = {
+  read  : 'r -> 'buf m;
+  write : 'r -> 'buf -> unit m
+}
