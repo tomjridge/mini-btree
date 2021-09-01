@@ -91,7 +91,7 @@ module Marshalling_with_bin_prot = struct
       |> fun uncached_store_ops -> 
       Make_util.add_cache ~uncached_store_ops
 
-    let blk_dev_to_store = blk_dev_to_store_cached
+    (* let blk_dev_to_store = blk_dev_to_store_cached *)
 
   end
 end
@@ -168,9 +168,8 @@ module Btree_on_mmap = struct
       let mmap = Mmap_.of_fd fd
       let blk_dev_ops = Make_intf.{read=read_blk mmap;write=write_blk mmap}
 
-      (* NOTE uncached *)
       let store_ops = 
-        M.blk_dev_to_store ~blk_dev_ops ~leaf_ops:leaf ~branch_ops:branch ~node_ops:node
+        M.blk_dev_to_store_cached ~blk_dev_ops ~leaf_ops:leaf ~branch_ops:branch ~node_ops:node
           ~blk_size:blk_sz 
     end
 

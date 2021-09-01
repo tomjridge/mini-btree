@@ -1,7 +1,23 @@
-type 'a m = 'a Lwt.t
-let return = Lwt.return
-let ( >>= ) = Lwt.(>>=)
+(** Main implementation types *)
 
+(** Trivial monad *)
+module M : sig 
+  type 'a m
+  val return : 'a -> 'a m
+  val ( >>= ) : 'a m -> ('a -> 'b m) -> 'b m
+  val run : 'a m -> 'a
+  val iter_p : ('a -> unit m) -> 'a list -> unit m
+  val async : (unit -> unit m) -> unit
+end = struct
+  type 'a m = 'a 
+  let return = fun x -> x
+  let ( >>= ) = fun x f -> f x
+  let run x = x
+  let iter_p f xs = 
+    xs |> List.iter f
+  let async f = f ()
+end
+include M
 
 type constants = {
   max_leaf_keys   : int;

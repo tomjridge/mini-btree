@@ -1,3 +1,4 @@
+(*
 (** (Using file descriptor) An example instance using bin_prot for
    marshalling, and a backing file to store the nodes of the B-tree *)
 
@@ -354,3 +355,4 @@ module Btree_on_file = struct
 end
 
 module Make : Make_intf.MAKE = Btree_on_file.Make_2
+*)

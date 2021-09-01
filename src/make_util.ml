@@ -27,10 +27,12 @@ module Add_cache(S:sig
     let c = C.create ~max_sz in
     let flush () = 
       C.to_seq c |> List.of_seq |> fun xs -> 
-      xs |> Lwt_list.iter_p (fun (r,v') -> 
+      xs |> iter_p 
+        begin fun (r,v') -> 
           (if v'.C.dirty then lower.write r v'.C.v else return ()) >>= fun () -> 
           v'.dirty <- false;
-          return ()) >>= fun () -> 
+          return () 
+        end >>= fun () -> 
       lower.flush () 
     in            
     let read r = 
@@ -49,8 +51,8 @@ module Add_cache(S:sig
       | true ->          
         C.trim c pc |> fun dirties -> 
         (* FIXME is following async OK if a subsequent trim overlaps? *)
-        Lwt.async (fun () -> 
-            Lwt_list.iter_p (fun (r,n) -> lower.write r n) dirties);
+        async (fun () -> 
+            iter_p (fun (r,n) -> lower.write r n) dirties);
         return ()
     in            
     {read;write;flush}

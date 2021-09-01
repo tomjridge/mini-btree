@@ -20,6 +20,7 @@ module type T = sig
   val size      : cache -> int
   val to_seq    : cache -> (k * v') Seq.t
   val trim      : cache -> float -> (k * v) list
+  val flush     : cache -> (k * v) list
 end
 
 module Make(S:sig
@@ -96,5 +97,39 @@ module Make(S:sig
         in
         dirty
       end
+
+  (* mark entries as clean, and return the dirties *)
+  let flush c =
+    to_seq c |> fun seq -> 
+    ([],seq) |> iter_k (fun ~k:kont (xs,seq) -> 
+        seq () |> function
+        | Seq.Nil -> xs
+        | Cons ( (k,v'),seq) -> 
+          match v'.dirty with
+          | false -> kont (xs,seq)
+          | true -> 
+            v'.dirty <- false;
+            kont ( (k,v'.v)::xs, seq))
 end
 
+
+(** Cache for find, insert, delete operations *)
+module Make_map_cache(S:sig type k type v end) = struct
+  
+  include Make(struct type k=S.k type v = [`Present of S.v | `Absent ] end) 
+  (* absent from a delete, or just not there; this explicitly records
+     when a key is not present in the lower map *)
+  
+  let find_opt c k = find_opt c k 
+
+  let insert c k v = add c k (`Present v)
+
+  let insert_many c kvs = kvs |> List.iter (fun (k,v) -> insert c k v)
+
+  let delete c k = add c k `Absent
+
+  (* if we go to the lower map and find a key is not present, we
+     record that here *)
+  let note_absent c k = add' c k {dirty=false;v=`Absent}
+       
+end
