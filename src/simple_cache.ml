@@ -131,5 +131,7 @@ module Make_map_cache(S:sig type k type v end) = struct
   (* if we go to the lower map and find a key is not present, we
      record that here *)
   let note_absent c k = add' c k {dirty=false;v=`Absent}
+
+  let note_present c k v = add' c k {dirty=false;v=`Present v}
        
 end

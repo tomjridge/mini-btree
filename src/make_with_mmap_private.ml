@@ -124,6 +124,13 @@ module Btree_on_mmap = struct
 
     module Mmap_ = Mmap.With_bigstring
 
+    (** Very topmost cache *)
+    module C = struct 
+      include Simple_cache.Make_map_cache(S)
+      let create () = create ~max_sz:100000
+    end        
+
+
     (* state type *)
     type t = {
       fn             : string; (* filename *)
@@ -132,6 +139,7 @@ module Btree_on_mmap = struct
       header         : header;
       store_ops      : (r,node) store_ops;
       btree_ops      : (k,v,r) btree_ops;
+      mcache         : C.cache;
       mutable closed : bool;
     }
 
@@ -206,7 +214,7 @@ module Btree_on_mmap = struct
         end) 
       in
       store_ops.write 1 (node.of_leaf (leaf.of_kvs [])) >>= fun () -> 
-      return { fn;fd;mmap;header;store_ops;btree_ops;closed=false }
+      return { fn;fd;mmap;header;store_ops;btree_ops;mcache=C.create ();closed=false }
 
     (* To open, read header *)
     let open_ ~fn = 
@@ -218,13 +226,22 @@ module Btree_on_mmap = struct
           let header=header 
         end) 
       in
-      return { fn;fd;mmap;header;store_ops;btree_ops;closed=false }
+      return { fn;fd;mmap;header;store_ops;btree_ops;mcache=C.create ();closed=false }
 
     let find t k = 
       assert(not t.closed);
-      t.btree_ops.find ~r:t.header.root ~k
+      C.find_opt t.mcache k |> function 
+      | None -> (
+          t.btree_ops.find ~r:t.header.root ~k >>= fun v -> 
+          match v with 
+          | None -> (C.note_absent t.mcache k; return v)
+          | Some v -> (C.note_present t.mcache k v; return (Some v)))
+      | Some v' -> (
+          match v' with
+          | `Absent -> return None
+          | `Present v -> return (Some v))
 
-    let insert t k v = 
+    let insert' t k v = 
       assert(not t.closed);
       t.btree_ops.insert ~k ~v ~r:t.header.root >>= fun (_free,new_root_o) -> 
       match new_root_o with
@@ -233,6 +250,12 @@ module Btree_on_mmap = struct
     (* NOTE we don't use free at this point, but in reality we should
        probably return the blocks to the freelist *)
 
+    let insert t k v = 
+      assert(not t.closed);
+      C.insert t.mcache k v;
+      return ()
+
+(*
     let insert_many t kvs = 
       assert(not t.closed);
       t.btree_ops.insert_many ~kvs ~r:t.header.root >>= function
@@ -243,14 +266,36 @@ module Btree_on_mmap = struct
           | None -> return kvs)
       | Remaining kvs -> return kvs
       | Unchanged_no_kvs -> return []
+*)
 
-    let delete t k = 
+    let delete' t k = 
       assert(not t.closed);
       t.btree_ops.delete ~k ~r:t.header.root
 
+    let delete t k = 
+      assert(not t.closed);
+      C.delete t.mcache k;
+      return ()
+
+    let trim t pc = 
+      C.trim t.mcache pc |> fun kvs -> 
+      kvs |> iter_p (fun (k,v) -> match v with
+          | `Absent -> delete' t k
+          | `Present v -> insert' t k v)
+      
+
+    let flush t =
+      C.flush t.mcache |> fun kvs -> 
+      kvs |> iter_p (fun (k,v) -> match v with
+          | `Absent -> delete' t k
+          | `Present v -> insert' t k v) >>= fun () -> 
+      t.store_ops.flush () >>= fun () -> 
+      (* flush fd? *)
+      return ()
+      
     (* To close, write header *)
     let close t = 
-      t.store_ops.flush () >>= fun () -> 
+      flush t >>= fun () -> 
       H.write t.mmap t.header >>= fun () -> 
       Mmap_.close t.mmap; (* closes the underlying fd *)
       t.closed <- true; return ()
@@ -265,10 +310,11 @@ module Btree_on_mmap = struct
     val open_       : fn:string -> t m
     val find        : t -> k -> v option m
     val insert      : t -> k -> v -> unit m
-    val insert_many : t -> (k * v) list -> (k * v) list m
+    (* val insert_many : t -> (k * v) list -> (k * v) list m *)
     val delete      : t -> k -> unit m
+    val trim        : t -> float -> unit m
+    val flush       : t -> unit m
     val close       : t -> unit m
-
   end
   = struct
     type k=S.k
@@ -276,8 +322,8 @@ module Btree_on_mmap = struct
     (* type r=S.r *)
     open Make1(S)
     type nonrec t = t
-    let create,open_,find,insert,insert_many,delete,close =
-      create,open_,find,insert,insert_many,delete,close
+    let create,open_,find,insert,(* insert_many, *)delete,trim,flush,close =
+      create,open_,find,insert,(* insert_many, *)delete,trim,flush,close
   end
 
 end

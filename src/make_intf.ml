@@ -26,8 +26,10 @@ module type T = sig
   val open_       : fn:string -> t m
   val find        : t -> k -> v option m
   val insert      : t -> k -> v -> unit m
-  val insert_many : t -> (k * v) list -> (k * v) list m
+  (* val insert_many : t -> (k * v) list -> (k * v) list m *)
   val delete      : t -> k -> unit m
+  val trim        : t -> float -> unit m
+  val flush       : t -> unit m
   val close       : t -> unit m
 end
 

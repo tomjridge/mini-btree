@@ -1,14 +1,14 @@
 
 (* let _ = print_endline "hello world!" *)
-open Lwt
 open Mini_btree
+open M
 open Util
 
-module Btree = Example_int_int_mmap
+module Btree = Examples.Example_int_int_mmap
 
 let fn = "test.btree"
 
-let run = Lwt_main.run
+let run = M.run
 
 let lim = 1_000_000
 
@@ -35,6 +35,7 @@ let _ =
     in
     run f
 
+(*
   | ["insert_many"] -> 
     Printf.printf "Inserting_many %d entries...\n" lim;
     let f = 
@@ -59,6 +60,7 @@ let _ =
       Btree.close t        
     in
     run f
+*)
 
   | ["delete"] -> 
     Printf.printf "Deleting some entries...\n";

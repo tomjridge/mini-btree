@@ -18,7 +18,8 @@ let dest_Some = function
   | Some x -> x
 
 (* trace execution *)
-let trace _s = 
+let trace s = 
   (* print_endline s *)
   ()
+[@@warning "-27"]
 
