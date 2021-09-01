@@ -1,14 +1,15 @@
 
 (* let _ = print_endline "hello world!" *)
-open Lwt
+(* open Lwt *)
 open Mini_btree
+open M
 open Util
 
-module Btree = Example_int_int_mmap
+module Btree = Examples.Example_int_int_mmap
 
 let fn = "test.btree"
 
-let run = Lwt_main.run
+(* let run = Lwt_main.run *)
 
 let lim = 1_000_000
 
