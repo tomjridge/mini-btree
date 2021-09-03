@@ -22,17 +22,20 @@ let _ =
     let f = Btree.create ~fn >>= fun t -> Btree.close t in
     run f end
   | ["insert"] -> 
-    Printf.printf "Inserting %d entries...\n" lim;
+    Printf.printf "Inserting %d entries...\n%!" lim;
     let f = 
       Btree.open_ ~fn >>= fun t -> 
       1 |> iter_k (fun ~k:kont i -> 
           match i > lim with
           | true -> return ()
           | false -> 
-            trace (Printf.sprintf "inserting %d" i);
+            (* trace (Printf.sprintf "inserting %d" i); *)
             Btree.insert t i (2*i) >>= fun () -> 
             kont (i+1)) >>= fun () -> 
-      Btree.close t        
+      Printf.printf "before close...\n%!";
+      Btree.close t >>= fun () -> 
+      Printf.printf "after close\n%!";
+      return ()
     in
     run f
 

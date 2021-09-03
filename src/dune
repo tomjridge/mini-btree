@@ -1,6 +1,7 @@
 (library
  (public_name "mini-btree")
  (name "mini_btree") ;; hyphens not allowed in lib names
+ (foreign_stubs (language c) (names caml_msync)) ; NOTE taken from plebeia
  (libraries lwt lwt.unix bigstringaf base bin_prot)
  (preprocess (pps ppx_bin_prot)) 
 )

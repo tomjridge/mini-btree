@@ -4,10 +4,9 @@
 (* FIXME it might still be worth caching to avoid repeated marshalling
    of the leafs and nodes that are subsequently modified and
    remarshalled *)
+open Util
 open Btree_impl_intf
 
-(* module Intf = Make_intf *)
-(* open Intf *)
 
 open (struct module Buf = Bigstringaf end)
 
@@ -17,11 +16,11 @@ type buf = Bigstringaf.t
 
 
 
-(** Generic marshalling, arbitrary k,v,r *)
+(** Generic marshalling, arbitrary k,v,r; direct to mmap *)
 module Marshalling_with_bin_prot = struct
 
   module type S = Make_intf.FOR_BIN_PROT
-  
+
   module Make(S:S) = struct
     open Bin_prot.Std
     open S
@@ -31,67 +30,36 @@ module Marshalling_with_bin_prot = struct
 
     [@@@warning "-26-27-32"]
 
-    let blk_dev_to_store_uncached
-        ~(blk_dev_ops:(r,buf) Make_intf.blk_dev_ops) 
+    let make_read_write
         ~(leaf_ops:_ leaf_ops) 
         ~(branch_ops:_ branch_ops) 
         ~(node_ops:_ node_ops) 
         ~blk_size
       =
-      let open (struct
-
-        (** Read the relevant blk, unmarshal using bin_prot, and convert
-            to leaf or branch *)
-        let read r =
-          blk_dev_ops.read r >>= fun buf -> 
-          bin_read_node buf ~pos_ref:(ref 0) |> fun node -> 
-          let node = 
-            match node with
-            | Branch(ks,rs) -> branch_ops.of_krs (ks,rs) |> node_ops.of_branch
-            | Leaf(kvs) -> leaf_ops.of_kvs kvs |> node_ops.of_leaf
-          in
-          return node
-
-        let buf_size = blk_size
-
-        (** Marshal the node and write to disk *)
-        let write r node = 
-          node |> node_ops.cases 
-            ~leaf:(fun lf -> 
-                leaf_ops.to_kvs lf |> fun kvs -> 
-                let ba = Bigstringaf.create buf_size in
-                Leaf kvs |> bin_write_node ba ~pos:0 |> fun _n -> 
-                blk_dev_ops.write r ba)
-            ~branch:(fun x -> 
-                branch_ops.to_krs x |> fun (ks,rs) -> 
-                let ba = Bigstringaf.create buf_size in
-                Branch (ks,rs) |> bin_write_node ba ~pos:0 |> fun _n -> 
-                blk_dev_ops.write r ba)
-
-        let flush () = return ()
-      end)
+      let read mmap r = 
+        bin_read_node mmap ~pos_ref:(ref (r*blk_size)) |> fun node -> 
+        let node = 
+          match node with
+          | Branch(ks,rs) -> branch_ops.of_krs (ks,rs) |> node_ops.of_branch
+          | Leaf(kvs) -> leaf_ops.of_kvs kvs |> node_ops.of_leaf
+        in
+        return node
       in
-      ({read;write;flush} : _ store_ops)
-
-    let _ = blk_dev_to_store_uncached
-
-    let blk_dev_to_store_cached
-        ~(blk_dev_ops:(r,buf) Make_intf.blk_dev_ops) 
-        ~(leaf_ops:_ leaf_ops) 
-        ~(branch_ops:_ branch_ops) 
-        ~(node_ops:_ node_ops) 
-        ~blk_size
-      = 
-      blk_dev_to_store_uncached 
-        ~blk_dev_ops
-        ~leaf_ops
-        ~branch_ops
-        ~node_ops
-        ~blk_size
-      |> fun uncached_store_ops -> 
-      Make_util.add_cache ~uncached_store_ops
-
-    (* let blk_dev_to_store = blk_dev_to_store_cached *)
+      let write mmap r node = 
+        let pos = r * blk_size in
+        assert(pos + blk_size < Bigstringaf.length mmap);
+        node |> node_ops.cases 
+          ~leaf:(fun lf -> 
+              leaf_ops.to_kvs lf |> fun kvs -> 
+              Leaf kvs |> bin_write_node mmap ~pos:(r*blk_size) |> fun n ->               
+              (* NOTE n is the next position, not the length *)
+              return n)
+          ~branch:(fun x -> 
+              branch_ops.to_krs x |> fun (ks,rs) -> 
+              Branch (ks,rs) |> bin_write_node mmap ~pos:(r*blk_size) |> fun n -> 
+              return n)
+      in
+      (read,write)
 
   end
 end
@@ -137,20 +105,23 @@ module Btree_on_mmap = struct
 
     (* FIXME why are we using lwt? *)
 
-    let write_blk mmap n buf = 
-      assert(Buf.length buf = blk_sz);
-      let file_offset = blk_sz * n in
-      Mmap_.unsafe_write mmap ~src:buf ~src_off:0 ~dst_off:file_offset ~len:blk_sz;
-      return ()
-
-    let read_blk mmap n =
-      let file_offset = blk_sz * n in
-      let buf = Buf.create blk_sz in
-      Mmap_.unsafe_read mmap ~src_off:file_offset ~len:blk_sz ~buf;
-      return buf
 
     (* Header block, always written to blk 0 *)
     module H = struct
+      let write_blk mmap n buf = 
+        assert(Buf.length buf = blk_sz);
+        assert(n=0);
+        let file_offset = blk_sz * n in
+        Mmap_.unsafe_write mmap ~src:buf ~src_off:0 ~dst_off:file_offset ~len:blk_sz;
+        return ()
+
+      let read_blk mmap n =
+        assert(n=0);
+        let file_offset = blk_sz * n in
+        let buf = Buf.create blk_sz in
+        Mmap_.unsafe_read mmap ~src_off:file_offset ~len:blk_sz ~buf;
+        return buf
+
       let write mmap h = 
         let ba = Bigstringaf.create blk_sz in (* ASSUMES header fits in blk *)
         ignore(bin_write_header ba ~pos:0 h);
@@ -166,11 +137,18 @@ module Btree_on_mmap = struct
       end) = struct
       open S
       let mmap = Mmap_.of_fd fd
-      let blk_dev_ops = Make_intf.{read=read_blk mmap;write=write_blk mmap}
 
-      let store_ops = 
-        M.blk_dev_to_store_cached ~blk_dev_ops ~leaf_ops:leaf ~branch_ops:branch ~node_ops:node
-          ~blk_size:blk_sz 
+      let store_ops : _ store_ops =         
+        let read,write = 
+          M.make_read_write ~leaf_ops:leaf ~branch_ops:branch ~node_ops:node
+            ~blk_size:blk_sz 
+        in
+        let raw = Mmap_.raw_mmap mmap in
+        let read = read raw in
+        let write r n = write raw r n >>= fun n -> 
+          Mmap_.raw_mmap_update_offset mmap n; return () in
+        let flush = fun () -> Msync.msync (raw |> genarray_of_array1); return () in
+        { read;write;flush }
     end
 
     module From_store(S:sig

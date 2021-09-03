@@ -80,17 +80,22 @@ module Make_1(S:S) = struct
     ()    
 
   (* FIXME need to use msync, not fsync *)
-  let fsync t = Unix.fsync t.fd
+  let sync t = Msync.msync (genarray_of_array1 t.buf)
       
   let fstat t = Unix.fstat t.fd
 
   (* FIXME need to use munmap *)
   let close t = 
-    fsync t;
+    sync t;
     (* reduce the size of the file to avoid large numbers of trailing
        0 bytes *)
     Unix.ftruncate t.fd t.min_not_written;
     Unix.close t.fd
+
+  let raw_mmap t = t.buf
+
+  let raw_mmap_update_offset t i = 
+    t.min_not_written <- max t.min_not_written i
 end
 
 module Make_2(S:S) : Mmap_intf.S_STRING = Make_1(S)
@@ -130,7 +135,8 @@ module Make_3(S:S) = struct
     Bigstringaf.blit t.buf ~src_off buf ~dst_off:0 ~len;
     ()    
 
-  let fsync,fstat,close = M.(fsync,fstat,close)
+  let sync,fstat,close,raw_mmap,raw_mmap_update_offset = 
+    M.(sync,fstat,close,raw_mmap,raw_mmap_update_offset)
 
 end
 
