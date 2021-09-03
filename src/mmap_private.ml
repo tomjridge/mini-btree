@@ -55,7 +55,9 @@ module Make_1(S:S) = struct
      we presumably want the new data to be changed *)
   let of_fd fd = 
     let sz = (Unix.fstat fd).st_size in
-    let buf = map fd (sz+mmap_increment_size) in
+    (* NOTE we don't increase the size at this point; that can happen
+       later *)
+    let buf = map fd sz in
     { fd; buf }
 
   let length t = Array1.dim t.buf 
