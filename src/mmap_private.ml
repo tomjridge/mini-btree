@@ -1,30 +1,29 @@
 (** Additional support for mmap; we want to have: 1) growable files;
    2) ability to track the max used part of the file *)
 
-(* open! Import *)
+(* open Util *)
+open Mmap_intf
 
 module Bigarray = Stdlib.Bigarray 
 
 open Bigarray
 
-type buffer = (char, int8_unsigned_elt, c_layout) Array1.t 
+type buffer = bigstring
 
 type t = { 
-  fd                      : Unix.file_descr; 
-  mutable buf             : buffer; 
-  mutable min_not_written : int (* min not written beyond file's initial size *)
+  fd          : Unix.file_descr; 
+  mutable buf : buffer; 
 }
 
 open Unix
 
-(** What we need to use mmap; for large file sizes, we need to be on
+(** What we need to use mmap; for large file sizes, we need to be on a
    64 bit machine *)
 module type S = sig 
   val int_size_is_geq_63: bool
   val mmap_increment_size: int 
 end
 
-(** Version with src_buf=string, dst_buf=bytes *)
 module Make_1(S:S) = struct
   open S
   let _ = assert(int_size_is_geq_63 && Sys.int_size >= 63)
@@ -57,87 +56,26 @@ module Make_1(S:S) = struct
   let of_fd fd = 
     let sz = (Unix.fstat fd).st_size in
     let buf = map fd (sz+mmap_increment_size) in
-    { fd; buf; min_not_written=sz }
+    { fd; buf }
 
-  let unsafe_write t ~(src:string) ~src_off ~dst_off ~len =
-    begin 
-      match dst_off+len > Array1.dim t.buf with
-      | true -> remap (dst_off+len+mmap_increment_size) t
-      | false -> ()
-    end;    
-    Bigstringaf.blit_from_string src ~src_off t.buf ~dst_off ~len;
-    t.min_not_written <- max t.min_not_written (dst_off+len);
-    ()
+  let length t = Array1.dim t.buf 
 
-  let unsafe_read t ~src_off ~len ~(buf:bytes) = 
-    assert(Bytes.length buf >= len);
-    begin 
-      match src_off+len > Array1.dim t.buf with
-      | true -> remap (src_off+len+mmap_increment_size) t
-      | false -> ()
-    end;    
-    Bigstringaf.blit_to_bytes t.buf ~src_off buf ~dst_off:0 ~len;
-    ()    
+  let rec sub t ~off ~len = 
+    let buf_len = Array1.dim t.buf in
+    match off+len <= buf_len with
+    | true -> Array1.sub t.buf off len
+    | false -> 
+      remap (buf_len + mmap_increment_size) t;
+      sub t ~off ~len
 
-  (* FIXME need to use msync, not fsync *)
-  let sync t = Msync.msync (genarray_of_array1 t.buf)
+  let msync t = Msync.msync (genarray_of_array1 t.buf)
       
   let fstat t = Unix.fstat t.fd
 
-  (* FIXME need to use munmap *)
   let close t = 
-    sync t;
-    (* reduce the size of the file to avoid large numbers of trailing
-       0 bytes *)
-    Unix.ftruncate t.fd t.min_not_written;
+    msync t;
+    t.buf <- Bigstringaf.create 0;
+    Gc.full_major ();
     Unix.close t.fd
-
-  let raw_mmap t = t.buf
-
-  let raw_mmap_update_offset t i = 
-    t.min_not_written <- max t.min_not_written i
 end
 
-module Make_2(S:S) : Mmap_intf.S_STRING = Make_1(S)
-
-(** Version with src_buf=dst_buf=bigstring *)  
-module Make_3(S:S) = struct
-
-  module Buf = Bigstringaf 
-  type buf = Buf.t
-
-  open S
-  let _ = assert(int_size_is_geq_63 && Sys.int_size >= 63)
-
-  type nonrec t = t
-
-  module M = Make_1(S)
-
-  let map,remap,of_fd = M.(map,remap,of_fd)
-
-  let unsafe_write t ~(src:buf) ~src_off ~dst_off ~len =
-    begin 
-      match dst_off+len > Array1.dim t.buf with
-      | true -> remap (dst_off+len+mmap_increment_size) t
-      | false -> ()
-    end;    
-    Bigstringaf.blit src ~src_off t.buf ~dst_off ~len;
-    t.min_not_written <- max t.min_not_written (dst_off+len);
-    ()
-
-  let unsafe_read t ~src_off ~len ~(buf:buf) = 
-    assert(Buf.length buf >= len);
-    begin 
-      match src_off+len > Array1.dim t.buf with
-      | true -> remap (src_off+len+mmap_increment_size) t
-      | false -> ()
-    end;    
-    Bigstringaf.blit t.buf ~src_off buf ~dst_off:0 ~len;
-    ()    
-
-  let sync,fstat,close,raw_mmap,raw_mmap_update_offset = 
-    M.(sync,fstat,close,raw_mmap,raw_mmap_update_offset)
-
-end
-
-module Make_4(S:S) : Mmap_intf.S_BIGSTRING = Make_3(S)

@@ -16,17 +16,17 @@ module type T = sig
   type k
   type v
   type t
-  val create      : fn:string -> t m
-  val open_       : fn:string -> t m
-  val find        : t -> k -> v option m
-  val insert      : t -> k -> v -> unit m
-  val insert_many : t -> (k * v) list -> (k * v) list m
-  val delete      : t -> k -> unit m
-  val close       : t -> unit m
+  val create      : fn:string -> t
+  val open_       : fn:string -> t
+  val find        : t -> k -> v option
+  val insert      : t -> k -> v -> unit
+  val insert_many : t -> (k * v) list -> (k * v) list
+  val delete      : t -> k -> unit
+  val close       : t -> unit
 end
 ```
 
-(see `make_intf.ml`; the monad is just `'a Lwt.t`, renamed to `'a m`)
+(see `src/make_intf.ml`)
 
 
 Docs may be found [here](http://tomjridge.github.io/ocamldocs/mini-btree/index.html)

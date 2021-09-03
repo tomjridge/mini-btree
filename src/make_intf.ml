@@ -22,13 +22,13 @@ module type T = sig
   type k
   type v
   type t
-  val create      : fn:string -> t m
-  val open_       : fn:string -> t m
-  val find        : t -> k -> v option m
-  val insert      : t -> k -> v -> unit m
-  val insert_many : t -> (k * v) list -> (k * v) list m
-  val delete      : t -> k -> unit m
-  val close       : t -> unit m
+  val create      : fn:string -> t
+  val open_       : fn:string -> t
+  val find        : t -> k -> v option
+  val insert      : t -> k -> v -> unit
+  val insert_many : t -> (k * v) list -> (k * v) list
+  val delete      : t -> k -> unit
+  val close       : t -> unit
 end
 
 (** Type of the Make functor *)
@@ -38,6 +38,6 @@ module type MAKE = functor (S:S) -> T with type k=S.k and type v=S.v
 (** Provided by the underlying block device, via lwt pread/pwrite on a
    file for example *)
 type ('r,'buf) blk_dev_ops = {
-  read  : 'r -> 'buf m;
-  write : 'r -> 'buf -> unit m
+  read  : 'r -> 'buf;
+  write : 'r -> 'buf -> unit
 }

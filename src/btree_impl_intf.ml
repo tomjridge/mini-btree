@@ -1,24 +1,5 @@
 (** Main implementation types *)
 
-(** Trivial monad *)
-module M : sig 
-  type 'a m
-  val return : 'a -> 'a m
-  val ( >>= ) : 'a m -> ('a -> 'b m) -> 'b m
-  val run : 'a m -> 'a
-  val iter_p : ('a -> unit m) -> 'a list -> unit m
-  val async : (unit -> unit m) -> unit
-end = struct
-  type 'a m = 'a 
-  let return = fun x -> x
-  let ( >>= ) = fun x f -> f x
-  let run x = x
-  let iter_p f xs = 
-    xs |> List.iter f
-  let async f = f ()
-end
-include M
-
 type constants = {
   max_leaf_keys   : int;
   max_branch_keys : int;
@@ -91,9 +72,9 @@ type ('branch,'leaf,'node) node_ops = {
 
 
 type ('r,'node) store_ops = {
-  read : 'r -> 'node m;
-  write : 'r -> 'node -> unit m;
-  flush : unit -> unit m;
+  read : 'r -> 'node;
+  write : 'r -> 'node -> unit;
+  flush : unit -> unit;
 }
 
 type 'r free = { free: 'r list }[@@inline]
@@ -106,16 +87,16 @@ type ('k,'v,'r) insert_many_return_type =
   | Unchanged_no_kvs
 
 type ('k,'v,'r) btree_ops = {
-  find: r:'r -> k:'k -> 'v option m;
+  find: r:'r -> k:'k -> 'v option;
 
-  insert: k:'k -> v:'v -> r:'r -> ('r free * 'r new_root option) m;
+  insert: k:'k -> v:'v -> r:'r -> ('r free * 'r new_root option);
 
   insert_many:
     kvs:('k * 'v) list ->
     r:'r ->
-    ('k,'v,'r) insert_many_return_type m;
+    ('k,'v,'r) insert_many_return_type;
 
-  delete: k:'k -> r:'r -> unit m
+  delete: k:'k -> r:'r -> unit
 }
 
 
@@ -144,7 +125,7 @@ module type T = sig
   (* Make function *)
   val make : 
     store : (r, node) store_ops -> 
-    alloc : (unit -> r m) -> 
+    alloc : (unit -> r) -> 
     (k, v, r) btree_ops
 end
 

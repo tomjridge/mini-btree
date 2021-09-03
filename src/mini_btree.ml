@@ -1,6 +1,6 @@
 module Util = Util
 
-module M = Btree_impl_intf.M
+(* module M = Btree_impl_intf.M *)
 
 module Btree_impl_intf = Btree_impl_intf
 

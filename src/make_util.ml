@@ -21,13 +21,16 @@ module Add_cache(S:sig
 
   let lower = uncached_store_ops
 
+  let return x = x
+  let ( >>= ) = ( |> )
+
   let cached_store_ops = 
     let max_sz = 1000 in
     let pc = 0.8 in (* trim to 80% of max_sz *)
     let c = C.create ~max_sz in
     let flush () = 
       C.to_seq c |> List.of_seq |> fun xs -> 
-      xs |> iter_p 
+      xs |> List.iter
         begin fun (r,v') -> 
           (if v'.C.dirty then lower.write r v'.C.v else return ()) >>= fun () -> 
           v'.dirty <- false;
@@ -50,9 +53,9 @@ module Add_cache(S:sig
       | false -> return ()
       | true ->          
         C.trim c pc |> fun dirties -> 
-        (* FIXME is following async OK if a subsequent trim overlaps? *)
-        async (fun () -> 
-            iter_p (fun (r,n) -> lower.write r n) dirties);
+        (* FIXME is following async OK if a subsequent trim overlaps?
+           FIXME should the following be async? *)        
+        List.iter (fun (r,n) -> lower.write r n) dirties;
         return ()
     in            
     {read;write;flush}

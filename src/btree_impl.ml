@@ -18,7 +18,7 @@ module Make_1(S:sig
     val branch    : (k,r,branch)branch_ops
     val node      : (branch,leaf,node)node_ops
     val store     : (r,node)store_ops
-    val alloc     : unit -> r m
+    val alloc     : unit -> r
   end) = struct
   open S
 
@@ -26,20 +26,20 @@ module Make_1(S:sig
     trace "f1";
     let rec find_r ~sofar ~r =
       trace "f2";
-      store.read r >>= fun n -> 
+      store.read r |> fun n -> 
       trace "f3";
       find_n ~sofar ~r ~n
     and find_n ~sofar ~r ~n =
       trace "f4";
       node.cases n
-        ~leaf:(fun l -> return (sofar,r,l))
+        ~leaf:(fun l -> (sofar,r,l))
         ~branch:(fun b -> 
             let (k1,r1,k2) = branch.find k0 b in
             find_r ~sofar:( (r,b,k1,r1,k2)::sofar ) ~r:r1)
     in
     find_r ~sofar:[] ~r
 
-  let _ : r:r -> k:k -> ((r * branch * k option * r * k option) list * r * leaf) m = find_leaf
+  let _ : r:r -> k:k -> ((r * branch * k option * r * k option) list * r * leaf) = find_leaf
 
   type stack = (r * branch * k option * r * k option) list
 
@@ -61,10 +61,10 @@ module Make_1(S:sig
           | None,None        -> k (stk,k1,k2) )
 
   let find ~r ~k = 
-    find_leaf ~r ~k >>= fun (_,_,l) -> 
-    return (leaf.lookup k l)
+    find_leaf ~r ~k |> fun (_,_,l) -> 
+    (leaf.lookup k l)
 
-  let _ : r:r -> k:k -> (v option) m = find
+  let _ : r:r -> k:k -> (v option) = find
 
   let {max_leaf_keys;max_branch_keys} = constants
 
@@ -82,22 +82,22 @@ module Make_1(S:sig
 
   let insert ~rebuild ~k ~v ~r =
     trace "in1";
-    find_leaf ~r ~k >>= fun (sofar,r,l) -> 
+    find_leaf ~r ~k |> fun (sofar,r,l) -> 
     trace "in1.5";
     leaf.insert k v l;
     trace "in2";
     match leaf_is_large l with
     | false -> 
       trace "in3";
-      store.write r (node.of_leaf l) >>= fun () -> 
-      return ({free=[]},None)
+      store.write r (node.of_leaf l) |> fun () -> 
+      ({free=[]},None)
     | true -> 
       trace "in4";
       split_large_leaf l |> fun (l1,k,l2) -> 
-      alloc () >>= fun r1 -> 
-      alloc () >>= fun r2 ->
-      store.write r1 (node.of_leaf l1) >>= fun () -> 
-      store.write r2 (node.of_leaf l2) >>= fun () -> 
+      alloc () |> fun r1 -> 
+      alloc () |> fun r2 ->
+      store.write r1 (node.of_leaf l1) |> fun () -> 
+      store.write r2 (node.of_leaf l2) |> fun () -> 
       rebuild ~free:[r] ~sofar ~r1 ~k ~r2 
 
 
@@ -114,38 +114,38 @@ module Make_1(S:sig
     match sofar with 
     | [] -> 
       (* need a new root *)
-      alloc () >>= fun r -> 
+      alloc () |> fun r -> 
       branch.make_small_root (r1,k,r2) |> fun b -> 
-      store.write r (node.of_branch b) >>= fun () -> 
-      return ({free},Some {new_root=r})
+      store.write r (node.of_branch b) |> fun () -> 
+       ({free},Some {new_root=r})
     | (r3,b,k1,r4,k2)::sofar -> 
       branch.replace (k1,r4,[],k2) (k1,r1,[(k,r2)],k2) b;
       match branch_is_large b with
       | false -> 
         (* FIXME we want to have a new node every point to the root *)
-        store.write r3 (node.of_branch b) >>= fun () -> 
-        return ({free},None)
+        store.write r3 (node.of_branch b) |> fun () -> 
+         ({free},None)
       | true -> 
         (* need to split again *)
         split_large_branch b |> fun (b1,k,b2) -> 
-        alloc () >>= fun r1 -> 
-        alloc () >>= fun r2 ->
-        store.write r1 (node.of_branch b1) >>= fun () -> 
-        store.write r2 (node.of_branch b2) >>= fun () -> 
+        alloc () |> fun r1 -> 
+        alloc () |> fun r2 ->
+        store.write r1 (node.of_branch b1) |> fun () -> 
+        store.write r2 (node.of_branch b2) |> fun () -> 
         rebuild ~free:(r3::free) ~sofar ~r1 ~k ~r2
 
   let _ : 
 free:r list ->
 sofar:(r * branch * k option * r * k option) list ->
-r1:r -> k:k -> r2:r -> (r free * r new_root option) m
+r1:r -> k:k -> r2:r -> (r free * r new_root option)
     = rebuild
 
   let insert ~k ~v ~r = 
     trace "i1";
-    insert ~rebuild ~k ~v ~r >>= fun r -> 
-    trace "i2"; return r
+    insert ~rebuild ~k ~v ~r |> fun r -> 
+    trace "i2";  r
 
-  let _ : k:k -> v:v -> r:r -> (r free * r new_root option) m = insert
+  let _ : k:k -> v:v -> r:r -> (r free * r new_root option) = insert
 
   let k_lt,k_leq = (k_lt ~k_cmp, k_leq ~k_cmp)
 
@@ -160,9 +160,9 @@ r1:r -> k:k -> r2:r -> (r free * r new_root option) m
      the performance advantage) *)
   let insert_many ~kvs ~r = 
     match kvs with
-    | [] -> return Unchanged_no_kvs
+    | [] ->  Unchanged_no_kvs
     | (k,v)::kvs -> 
-      find_leaf ~r ~k >>= fun (sofar,r,l) -> 
+      find_leaf ~r ~k |> fun (sofar,r,l) -> 
       let (lo,hi) = bounds sofar in
       (* We insert as many as we can, subject to bounds, upto twice
          the max leaf size; when we can do no more, we either rebuild
@@ -180,22 +180,22 @@ r1:r -> k:k -> r2:r -> (r free * r new_root option) m
       in
       match leaf_is_large l with
       | false -> 
-        store.write r (node.of_leaf l) >>= fun () -> 
-        return (Remaining remaining)
+        store.write r (node.of_leaf l) |> fun () -> 
+         (Remaining remaining)
       | true -> 
         split_large_leaf l |> fun (l1,k,l2) -> 
-        alloc () >>= fun r1 -> 
-        alloc () >>= fun r2 ->
-        store.write r1 (node.of_leaf l1) >>= fun () -> 
-        store.write r2 (node.of_leaf l2) >>= fun () -> 
-        rebuild ~free:[r] ~sofar ~r1 ~k ~r2 >>= fun (free,new_root_opt) -> 
-        return (Rebuilt (free,new_root_opt,remaining))
+        alloc () |> fun r1 -> 
+        alloc () |> fun r2 ->
+        store.write r1 (node.of_leaf l1) |> fun () -> 
+        store.write r2 (node.of_leaf l2) |> fun () -> 
+        rebuild ~free:[r] ~sofar ~r1 ~k ~r2 |> fun (free,new_root_opt) -> 
+         (Rebuilt (free,new_root_opt,remaining))
 
 
   let _ : 
     kvs:(k * v) list ->
     r:r ->
-    (k,v,r) insert_many_return_type m= insert_many
+    (k,v,r) insert_many_return_type = insert_many
 
       
       
@@ -207,7 +207,7 @@ r1:r -> k:k -> r2:r -> (r free * r new_root option) m
       takes longer than it might if we actually implemented delete
       properly. *)
   let delete ~k ~r =
-    find_leaf ~k ~r >>= fun (_,r,l) -> 
+    find_leaf ~k ~r |> fun (_,r,l) -> 
     leaf.remove k l;
     store.write r (node.of_leaf l)
 
@@ -431,7 +431,7 @@ module Make_2(S:S_kvr)
     (* Make function *)
     val make : 
       store : (r, node) store_ops -> 
-      alloc : (unit -> r m) -> 
+      alloc : (unit -> r) -> 
       (k, v, r) btree_ops
   end 
 = 
@@ -452,7 +452,7 @@ struct
   module Make
       (T:sig 
          val store     : (r,node)store_ops
-         val alloc     : unit -> r m
+         val alloc     : unit -> r
        end) 
     : 
     sig

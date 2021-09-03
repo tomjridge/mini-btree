@@ -2,7 +2,6 @@
 (* let _ = print_endline "hello world!" *)
 (* open Lwt *)
 open Mini_btree
-open M
 open Util
 
 module Btree = Examples.Example_int_int_mmap
@@ -19,33 +18,33 @@ let _ =
   match Sys.argv |> Array.to_list |> List.tl with
   | ["create"] -> begin
     Printf.printf "Creating...\n";
-    let f = Btree.create ~fn >>= fun t -> Btree.close t in
-    run f end
+    Btree.create ~fn |> fun t -> Btree.close t
+  end
   | ["insert"] -> 
     Printf.printf "Inserting %d entries...\n%!" lim;
     let f = 
-      Btree.open_ ~fn >>= fun t -> 
+      Btree.open_ ~fn |> fun t -> 
       1 |> iter_k (fun ~k:kont i -> 
           match i > lim with
-          | true -> return ()
+          | true -> ()
           | false -> 
             (* trace (Printf.sprintf "inserting %d" i); *)
-            Btree.insert t i (2*i) >>= fun () -> 
-            kont (i+1)) >>= fun () -> 
+            Btree.insert t i (2*i) |> fun () -> 
+            kont (i+1)) |> fun () -> 
       Printf.printf "before close...\n%!";
-      Btree.close t >>= fun () -> 
+      Btree.close t |> fun () -> 
       Printf.printf "after close\n%!";
-      return ()
+      ()
     in
-    run f
+    f
 
   | ["insert_many"] -> 
     Printf.printf "Inserting_many %d entries...\n" lim;
     let f = 
-      Btree.open_ ~fn >>= fun t -> 
+      Btree.open_ ~fn |> fun t -> 
       1 |> iter_k (fun ~k:kont i -> 
           match i > lim with
-          | true -> return ()
+          | true -> ()
           | false -> 
             trace (Printf.sprintf "inserting %d" i);
             (* NOTE we want to include lim, so go upto lim+1 *)
@@ -55,41 +54,41 @@ let _ =
             let kvs = List.map (fun x -> (x,2*x)) ks in
             kvs |> iter_k (fun ~k:kont2 kvs -> 
                 match kvs with
-                | [] -> return ()
+                | [] -> ()
                 | _ -> 
-                  Btree.insert_many t kvs >>= fun kvs -> 
-                  kont2 kvs) >>= fun () -> 
-            kont j) >>= fun () -> 
+                  Btree.insert_many t kvs |> fun kvs -> 
+                  kont2 kvs) |> fun () -> 
+            kont j) |> fun () -> 
       Btree.close t        
     in
-    run f
+    f
 
   | ["delete"] -> 
     Printf.printf "Deleting some entries...\n";
     let f = 
-      Btree.open_ ~fn >>= fun t -> 
+      Btree.open_ ~fn |> fun t -> 
       100 |> iter_k (fun ~k:kont i -> 
           match i >=200 with
-          | true -> return ()
+          | true -> ()
           | false -> 
             trace (Printf.sprintf "deleting %d" i);
-            Btree.delete t i >>= fun () -> 
-            kont (i+1)) >>= fun () -> 
+            Btree.delete t i |> fun () -> 
+            kont (i+1)) |> fun () -> 
       Btree.close t        
     in
-    run f
+    f
   | ["list"] -> 
     Printf.printf "Listing first few entries (max 1000)...\n";
     (* list first few values *)
     let f = 
-      Btree.open_ ~fn >>= fun t -> 
+      Btree.open_ ~fn |> fun t -> 
       (1,[]) |> iter_k (fun ~k:kont (i,xs) -> 
           match i > min lim 1000 with
-          | true -> return xs
+          | true -> xs
           | false -> 
-            Btree.find t i >>= function
+            Btree.find t i |> function
             | None -> kont (i+1,xs)
-            | Some v -> kont (i+1,(i,v)::xs)) >>= fun xs -> 
+            | Some v -> kont (i+1,(i,v)::xs)) |> fun xs -> 
       let open Sexplib.Std in
       begin         
         Sexplib.Sexp.to_string_hum 
@@ -99,6 +98,6 @@ let _ =
       end;      
       Btree.close t
     in
-    run f
+    f
   | _ -> failwith "unrecognized command line arg"
     
