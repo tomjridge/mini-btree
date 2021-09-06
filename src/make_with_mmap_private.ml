@@ -133,7 +133,8 @@ module Btree_on_mmap = struct
       (** Add a store cache, which improves performance dramatically
          for single inserts because it avoids repeated
          marshalling/demarshalling *)
-      let store_ops = Make_util.add_cache ~uncached_store_ops
+      let store_ops = Make_util.add_cache ~uncached_store_ops ~max_sz:500_000
+      (* FIXME this cache is ridiculously large *)
     end
 
     module From_store(S:sig

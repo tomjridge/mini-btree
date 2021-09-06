@@ -6,6 +6,7 @@ module Add_cache(S:sig
     type r
     type node
     val uncached_store_ops: (r,node)store_ops
+    val max_sz : int
   end) 
 : sig val cached_store_ops: (S.r,S.node)store_ops end
 = struct
@@ -25,7 +26,7 @@ module Add_cache(S:sig
   let ( >>= ) = ( |> )
 
   let cached_store_ops = 
-    let max_sz = 1000 in
+    (* let max_sz = 1000 in *)
     let pc = 0.8 in (* trim to 80% of max_sz *)
     let c = C.create ~max_sz in
     let flush () = 
@@ -62,11 +63,13 @@ module Add_cache(S:sig
 
 end
 
-let add_cache (type r node) ~(uncached_store_ops:(r,node)store_ops) = 
+let add_cache (type r node) ~(uncached_store_ops:(r,node)store_ops) ~max_sz = 
   let module A = Add_cache(struct 
       type nonrec r=r 
       type nonrec node=node 
-      let uncached_store_ops=uncached_store_ops end) 
+      let uncached_store_ops=uncached_store_ops 
+      let max_sz = max_sz
+    end) 
   in
   A.cached_store_ops
 
