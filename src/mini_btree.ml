@@ -21,7 +21,7 @@ module Private = struct
   module Make = Make 
 
   (* With fd *)
-  module Make_with_fd_private = Make_with_fd_private
+  (* module Make_with_fd_private = Make_with_fd_private *)
 
   (* With mmap *)
   module Make_with_mmap_private = Make_with_mmap_private

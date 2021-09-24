@@ -36,7 +36,7 @@ module Marshalling_with_bin_prot = struct
         ~(node_ops:_ node_ops) 
         ~blk_size
       =
-      let read (mmap:Mmap.t) r = 
+      let read (mmap:_ Mmap.t) r = 
         let buf = Mmap.sub mmap ~off:(r*blk_size) ~len:blk_size in
         bin_read_node buf ~pos_ref:(ref 0) |> fun node -> 
         let node = 
@@ -46,7 +46,7 @@ module Marshalling_with_bin_prot = struct
         in
         node
       in
-      let write (mmap:Mmap.t) r node = 
+      let write (mmap:_ Mmap.t) r node = 
         let buf = Mmap.sub mmap ~off:(r*blk_size) ~len:blk_size in
         node |> node_ops.cases 
           ~leaf:(fun lf -> 
@@ -95,7 +95,7 @@ module Btree_on_mmap = struct
     type t = {
       fn             : string; (* filename *)
       fd             : Unix.file_descr;
-      mmap           : Mmap.t;
+      mmap           : Mmap.char_mmap;
       header         : header;
       store_ops      : (r,node) store_ops;
       btree_ops      : (k,v,r) btree_ops;
@@ -118,7 +118,7 @@ module Btree_on_mmap = struct
         val fd: Unix.file_descr
       end) = struct
       open S
-      let mmap = Mmap.of_fd fd
+      let mmap = Mmap.(of_fd fd char_kind)
 
       let uncached_store_ops : _ store_ops =         
         let read,write = 
