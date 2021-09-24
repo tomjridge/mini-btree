@@ -10,7 +10,7 @@ let fn = "test.btree"
 
 (* let run = Lwt_main.run *)
 
-let lim = 1_000_000
+(* let lim = 1_000_000 *)
 
 let insert_many_size = 1000
 
@@ -20,7 +20,8 @@ let _ =
     Printf.printf "Creating...\n";
     Btree.create ~fn |> fun t -> Btree.close t
   end
-  | ["insert"] -> 
+  | ["insert";lim] -> 
+    let lim = int_of_string lim in
     Printf.printf "Inserting %d entries...\n%!" lim;
     let f = 
       Btree.open_ ~fn |> fun t -> 
@@ -38,7 +39,8 @@ let _ =
     in
     f
 
-  | ["insert_many"] -> 
+  | ["insert_many";lim] -> 
+    let lim = int_of_string lim in
     Printf.printf "Inserting_many %d entries...\n" lim;
     let f = 
       Btree.open_ ~fn |> fun t -> 
@@ -63,6 +65,58 @@ let _ =
     in
     f
 
+  | ["random_w";lim] -> 
+    let lim = int_of_string lim in
+    Printf.printf "Random writes, %d entries...\n%!" lim;
+    let f = 
+      Btree.open_ ~fn |> fun t -> 
+      1 |> iter_k (fun ~k:kont i -> 
+          match i > lim with
+          | true -> ()
+          | false -> 
+            (* trace (Printf.sprintf "inserting %d" i); *)
+            let k = Random.int 1_000_000_000 in
+            Btree.insert t k (2*k) |> fun () -> 
+            kont (i+1)) |> fun () -> 
+      Printf.printf "before close...\n%!";
+      Btree.close t |> fun () -> 
+      Printf.printf "after close\n%!";
+      ()
+    in
+    f
+
+
+  | ["random_wb";n;sz] -> 
+    (* random writes, in batches of size *)
+    let batch_sz = int_of_string sz in
+    let n = int_of_string n in
+    Printf.printf "Random writes, %d batches, %d in each batch...\n%!" n batch_sz;
+    Btree.open_ ~fn |> fun t -> 
+    let t1 = Util.time () in
+    1 |> iter_k (fun ~k:kont n' -> 
+        match n' > n with
+        | true -> ()
+        | false -> 
+          (* trace (Printf.sprintf "inserting %d" i); *)
+          let xs = List.init batch_sz (fun _ -> Random.int 1_000_000_000) in
+          let xs = List.sort Int.compare xs in
+          let xs = List.map (fun x -> (x,2*x)) xs in
+          xs |> iter_k (fun ~k:kont1 xs ->
+              Btree.insert_many t xs |> fun xs -> 
+              match xs with
+              | [] -> ()
+              | _ -> kont1 xs);
+          kont (n'+1));
+    let t2 = Util.time () in
+    Printf.printf "Completed in %f\n%!" (t2 -. t1);
+    Printf.printf "before close...\n%!";
+    Btree.close t |> fun () -> 
+    let t3 = Util.time () in
+    Printf.printf "Completed in %f\n%!" (t3 -. t2);
+    Printf.printf "after close\n%!";
+    ()
+    
+
   | ["delete"] -> 
     Printf.printf "Deleting some entries...\n";
     let f = 
@@ -77,7 +131,8 @@ let _ =
       Btree.close t        
     in
     f
-  | ["list"] -> 
+  | ["list";lim] -> 
+    let lim = int_of_string lim in
     Printf.printf "Listing first few entries (max 1000)...\n";
     (* list first few values *)
     let f = 

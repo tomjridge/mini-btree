@@ -12,6 +12,7 @@ module Make_with_mmap = Make.Make_with_mmap
 
 module Examples = Examples
 
+module With_values = With_values
 
 module Private = struct
   (** Most of the actual modules *)
@@ -29,5 +30,7 @@ module Private = struct
   (* Various mmap modules which we do not expose here *)
 
   module Simple_cache = Simple_cache
+
+  module Values = Values
 
 end

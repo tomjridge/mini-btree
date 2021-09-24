@@ -18,6 +18,8 @@ module Example_int_int_mmap : Make_intf.T with type k=int and type v=int = struc
 
 end
 
+module Example_ii = Example_int_int_mmap
+
 
 module Example_string_string_mmap(S0:sig val max_k_size:int val max_v_size:int end) 
   : Make_intf.T with type k=string and type v=string 

@@ -25,3 +25,6 @@ let trace _s =
 let array1_of_genarray = Bigarray.array1_of_genarray
 
 let genarray_of_array1 = Bigarray.genarray_of_array1
+
+
+let time () = Unix.gettimeofday ()

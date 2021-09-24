@@ -26,6 +26,7 @@ module type T = sig
   val open_       : fn:string -> t
   val find        : t -> k -> v option
   val insert      : t -> k -> v -> unit
+  (* FIXME prefer insert_all, or even better, batch; batch maybe takes a hashtbl *)
   val insert_many : t -> (k * v) list -> (k * v) list
   val delete      : t -> k -> unit
   val close       : t -> unit
