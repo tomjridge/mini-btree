@@ -211,8 +211,17 @@ r1:r -> k:k -> r2:r -> (r free * r new_root option)
     leaf.remove k l;
     store.write r (node.of_leaf l)
 
+  let rec export r = 
+    store.read r |> fun n -> 
+    `On_disk (r,node.cases n 
+                ~leaf:(fun l -> `Leaf (leaf.to_kvs l))
+                ~branch:(fun b -> `Branch (
+                    branch.to_krs b |> fun (ks,rs) -> 
+                    ks,List.map export rs)))
+    
+
   (** The btree operations *)
-  let btree_ops = { find; insert; insert_many; delete }
+  let btree_ops = { find; insert; insert_many; delete; export }
 
 end
 

@@ -86,6 +86,10 @@ type ('k,'v,'r) insert_many_return_type =
   | Remaining of ('k * 'v) list
   | Unchanged_no_kvs
 
+(** Types used for exporting/importing only *)
+type ('k,'v,'r) export_t = 
+  [ `On_disk of 'r * [ `Leaf of ('k*'v) list | `Branch of 'k list * ('k,'v,'r) export_t list ] ]
+
 type ('k,'v,'r) btree_ops = {
   find: r:'r -> k:'k -> 'v option;
 
@@ -96,7 +100,9 @@ type ('k,'v,'r) btree_ops = {
     r:'r ->
     ('k,'v,'r) insert_many_return_type;
 
-  delete: k:'k -> r:'r -> unit
+  delete: k:'k -> r:'r -> unit;
+  
+  export: 'r -> ('k,'v,'r) export_t;
 }
 
 

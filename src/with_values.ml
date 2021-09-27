@@ -45,11 +45,12 @@ module Make_1 = struct
           | (k, `Insert v) -> kont ((k,v)::is,ds,ops)
           | (k, `Delete) -> kont (is,k::ds,ops))
     |> fun (is,ds) -> 
-    (* sort for key locality *)
-    let is = is |> List.sort (fun (k1,_) (k2,_) -> Int.compare k1 k2) in
+    (* sort for key locality, in reverse so we can rev_map NOTE k2 k1 not k1 k2 *)
+    let is = is |> List.sort (fun (k1,_) (k2,_) -> Int.compare k2 k1) in
     (* convert string values to int *)
-    let is = is |> List.map (fun (k,v_s) -> (k,Values.append_value t.values v_s)) in
+    let is = is |> List.rev_map (fun (k,v_s) -> (k,Values.append_value t.values v_s)) in
     let ds = List.sort Int.compare ds in
+    assert(List.length ds = 0);
     (* inserts *)
     is |> iter_k (fun ~k:kont kvs -> 
         match kvs with

@@ -212,6 +212,9 @@ module Btree_on_mmap = struct
       assert(not t.closed);
       t.btree_ops.delete ~k ~r:t.header.root
 
+    let export t = 
+      t.btree_ops.export t.header.root
+
     (* To close, write header *)
     let close t = 
       t.store_ops.flush () |> fun () -> 
@@ -224,6 +227,7 @@ module Btree_on_mmap = struct
   module Make_2(S:S) : sig
     type k=S.k
     type v=S.v
+    type r=S.r
     type t
     val create      : fn:string -> t
     val open_       : fn:string -> t
@@ -231,17 +235,18 @@ module Btree_on_mmap = struct
     val insert      : t -> k -> v -> unit
     val insert_many : t -> (k * v) list -> (k * v) list
     val delete      : t -> k -> unit
+    val export      : t -> (k, v,r) export_t
     val close       : t -> unit
 
   end
   = struct
     type k=S.k
     type v=S.v
-    (* type r=S.r *)
+    type r=S.r
     open Make1(S)
     type nonrec t = t
-    let create,open_,find,insert,insert_many,delete,close =
-      create,open_,find,insert,insert_many,delete,close
+    let create,open_,find,insert,insert_many,delete,export,close =
+      create,open_,find,insert,insert_many,delete,export,close
   end
 
 end
