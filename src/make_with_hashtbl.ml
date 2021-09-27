@@ -1,5 +1,6 @@
 (** In-memory implementation; no marshalling *)
 
+open Util
 open Btree_impl_intf
 
 (* NOTE we don't use k_cmp, since we use a hashtbl for the store *)
@@ -52,6 +53,28 @@ module Make_1(S:S_kvr with type r=int) = struct
 
   let export t : _ export_t = 
     t.btree_ops.export t.root
+
+  let import (e:_ export_t) = 
+    create () |> fun t -> 
+    (* write to relevant blocks *)
+    let root = 
+      e |> iter_k (fun ~k:kont e -> 
+        match e with
+          | `On_disk(r,`Branch (ks,es)) -> 
+            es |> List.map kont |> fun rs ->             
+            t.store_ops.write r (node.of_branch (branch.of_krs (ks,rs)));
+            r
+          | `On_disk(r,`Leaf kvs) -> 
+            t.store_ops.write r (node.of_leaf (leaf.of_kvs kvs));
+            r)
+    in
+    (* set root *)
+    t.root <- root;
+    (* patch up min_free *)
+    t.min_free := 1+(Hashtbl.to_seq_keys t.store |> List.of_seq |> List.fold_left max 0);
+    (* return *)
+    t    
+        
     
 end
 
@@ -65,8 +88,10 @@ module type T = sig
   val insert : t -> k -> v -> unit
   val delete : t -> k -> unit
   val batch : t -> (k * [ `Delete | `Insert of v ]) list -> unit
+  val export : t -> (k,v,r) export_t
+  val import : (k,v,r) export_t -> t
 end
 
-module Make_2(S:S_kvr with type r=int) : T = Make_1(S)
+module Make_2(S:S_kvr with type r=int) : T with type k=S.k and type v=S.v = Make_1(S)
 
 module Make = Make_2

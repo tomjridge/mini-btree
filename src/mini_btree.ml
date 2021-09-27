@@ -10,6 +10,8 @@ module Make_intf = Make_intf
 
 module Make_with_mmap = Make.Make_with_mmap
 
+module Make_with_hashtbl = Make_with_hashtbl
+
 module Examples = Examples
 
 module With_values = With_values
