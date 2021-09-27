@@ -1,5 +1,13 @@
 (executable
  (name test)
+ (modules Test)
  (libraries mini-btree sexplib)
  (preprocess (pps ppx_sexp_message))
+)
+
+(executable
+ (name exhaustive)
+ (modules Exhaustive)
+ (libraries mini-btree sexplib)
+ (preprocess (pps ppx_sexp_conv ppx_sexp_message))
 )
