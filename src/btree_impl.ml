@@ -294,7 +294,9 @@ struct
      always in the map; None < Some k; we use Base.Map because it has
      a slightly more extensive API which suits our purpose here *)
 
-  
+  (* NOTE branch.replace is not atomic; to avoid other threads seeing
+     the intermediate state, we need per-branch locks; or
+     alternatively, update out of the ref and replace in the ref *)
 
 
   module K' = struct 
@@ -335,7 +337,17 @@ struct
 
   let of_krs' krs = 
     let (ks,rs) = krs in
-    assert(List.length ks +1 = List.length rs);
+    assert(
+      List.length ks +1 = List.length rs || begin
+        let open Sexplib.Std in
+        Sexplib.Sexp.to_string_hum 
+          [%message "of_krs' failure"
+              ~len_ks:(List.length ks : int)
+              ~len_rs:(List.length rs : int)
+          ] |> print_endline;
+        false        
+      end
+    );
     List.combine (None::ks) rs |> fun krs -> 
     krs |> Map.of_alist_exn comparator
 
@@ -365,6 +377,8 @@ struct
     match ys with
     | (Some k,r)::krs -> 
       List.split krs |> fun (ks2,rs2) -> 
+      assert(List.length ks1 +1 = List.length rs1);
+      assert(List.length ks2 +1 = List.length (r::rs2));
       of_krs' (ks1,rs1),k,(of_krs' (ks2,r::rs2))
     | _ -> failwith "split_branch:ys"
 
@@ -390,6 +404,8 @@ struct
     |> fun b -> 
     b
   
+  (* NOTE because the updates in eg replace are done outside the ref,
+     changes become visible atomically to concurrent readers *)
   let branch : _ branch_ops = {
     find=(fun k b -> find k !b);
     branch_nkeys=(fun b -> Map.length !b);

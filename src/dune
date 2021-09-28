@@ -1,7 +1,7 @@
 (library
  (public_name "mini-btree")
  (name "mini_btree") ;; hyphens not allowed in lib names
- (libraries lwt lwt.unix bigstringaf base bin_prot mmap xxhash)
- (preprocess (pps ppx_bin_prot)) 
+ (libraries lwt lwt.unix bigstringaf base bin_prot mmap xxhash sexplib)
+ (preprocess (pps ppx_bin_prot ppx_sexp_message)) 
 )
 

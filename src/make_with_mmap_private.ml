@@ -26,7 +26,9 @@ module Marshalling_with_bin_prot = struct
     open S
 
     (* What gets stored on disk *)
-    type node = Branch of k list * r list | Leaf of (k*v) list [@@deriving bin_io]
+    type node = Branch of string * k list * r list | Leaf of (k*v) list [@@deriving bin_io]
+
+    let nonce = "brnch"
 
     [@@@warning "-26-27-32"]
 
@@ -41,7 +43,15 @@ module Marshalling_with_bin_prot = struct
         bin_read_node buf ~pos_ref:(ref 0) |> fun node -> 
         let node = 
           match node with
-          | Branch(ks,rs) -> branch_ops.of_krs (ks,rs) |> node_ops.of_branch
+          | Branch(s,ks,rs) -> 
+            assert(s=nonce || begin
+                Printf.printf "%s, read: read %S, was expecting %s\n%!"
+                  __MODULE__
+                  s
+                  nonce;
+                false
+              end);
+            branch_ops.of_krs (ks,rs) |> node_ops.of_branch
           | Leaf(kvs) -> leaf_ops.of_kvs kvs |> node_ops.of_leaf
         in
         node
@@ -56,7 +66,7 @@ module Marshalling_with_bin_prot = struct
               ())
           ~branch:(fun x -> 
               branch_ops.to_krs x |> fun (ks,rs) -> 
-              Branch (ks,rs) |> bin_write_node buf ~pos:0 |> fun _n -> 
+              Branch (nonce,ks,rs) |> bin_write_node buf ~pos:0 |> fun _n -> 
               ())
       in
       (read,write)

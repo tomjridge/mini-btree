@@ -14,7 +14,7 @@ module S = struct
   type v=int
   type r=int
   (* let constants = {max_leaf_keys=2;max_branch_keys=2} *)
-  let constants = {max_leaf_keys=1;max_branch_keys=2}
+  let constants = {max_leaf_keys=3;max_branch_keys=3}
   let k_cmp = { k_cmp=Int.compare }
 end
 
@@ -22,7 +22,7 @@ module Btree = Mini_btree.Make_with_hashtbl.Make(S)
 
 module Oracle = Map.Make(struct type t = int let compare = Int.compare end)
 
-let lo,hi = 1,20
+let lo,hi = 1,40
 
 let keys = Base.List.range lo hi
 
@@ -166,7 +166,7 @@ let rec depth (t:Btree.t) (o:_ Oracle.t) n =
 let go () = 
   let t = Btree.create () in
   let o = Oracle.empty in
-  depth t o 5
+  depth t o 4
     
 let main = go ()    
   

@@ -52,12 +52,15 @@ module Make_1 = struct
     let ds = List.sort Int.compare ds in
     assert(List.length ds = 0);
     (* inserts *)
+(*
     is |> iter_k (fun ~k:kont kvs -> 
         match kvs with
         | [] -> ()
         | _ -> 
           Btree.insert_many t.btree kvs |> fun kvs -> 
           kont kvs);
+*)
+    is |> List.iter (fun (k,v) -> Btree.insert t.btree k v);
     (* deletes *)
     ds |> List.iter (Btree.delete t.btree);
     ()
