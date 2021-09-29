@@ -30,7 +30,13 @@ module Marshalling_with_bin_prot = struct
 
     let nonce = "brnch"
 
-    [@@@warning "-26-27-32"]
+    (* [@@@warning "-26-27-32"] *)
+
+    let assert_hook = ref (fun ~r:_ ~read -> 
+        Printf.printf "%s, read: read %S, was expecting %S\n%!"
+          __MODULE__
+          read
+          nonce)
 
     let make_read_write
         ~(leaf_ops:_ leaf_ops) 
@@ -44,13 +50,7 @@ module Marshalling_with_bin_prot = struct
         let node = 
           match node with
           | Branch(s,ks,rs) -> 
-            assert(s=nonce || begin
-                Printf.printf "%s, read: read %S, was expecting %s\n%!"
-                  __MODULE__
-                  s
-                  nonce;
-                false
-              end);
+            assert(s=nonce || ((!assert_hook) ~r ~read:s; false));
             branch_ops.of_krs (ks,rs) |> node_ops.of_branch
           | Leaf(kvs) -> leaf_ops.of_kvs kvs |> node_ops.of_leaf
         in
@@ -85,6 +85,13 @@ module Btree_on_mmap = struct
     open S
 
     module M = Marshalling_with_bin_prot.Make(S)
+
+    let _ = M.assert_hook := begin fun ~r ~read -> 
+        Printf.printf "%s, read: r=%d; read %S, was expecting %S\n%!"
+          __MODULE__
+          r
+          read
+          M.nonce end
 
     module B = Btree_impl.Make(S)
     open B
@@ -143,8 +150,29 @@ module Btree_on_mmap = struct
       (** Add a store cache, which improves performance dramatically
          for single inserts because it avoids repeated
          marshalling/demarshalling *)
-      let store_ops = Make_util.add_cache ~uncached_store_ops ~max_sz:500_000
+
+      module Cached_store = Make_util.Add_cache(struct
+          type nonrec r=r
+          type nonrec node=node
+          let uncached_store_ops = uncached_store_ops
+          let max_sz=500_000
+        end)
+
+      (* check read is from a block that was previously written *)
+      let _ = 
+        let tbl = Hashtbl.create 1024 in
+        Cached_store.write_hook := (fun ~r ~n -> Hashtbl.replace tbl r n);
+        Cached_store.read_hook := (fun ~r ~n -> 
+            assert(Hashtbl.find_opt tbl r = Some n);
+            ())
+
+      let store_ops = Cached_store.cached_store_ops
+
+      (* let store_ops = Make_util.add_cache ~uncached_store_ops ~max_sz:500_000 *)
       (* FIXME this cache is ridiculously large *)
+
+      (* let store_ops = uncached_store_ops *)
+
     end
 
     module From_store(S:sig

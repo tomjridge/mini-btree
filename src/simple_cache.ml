@@ -19,7 +19,7 @@ module type T = sig
   val remove    : cache -> k -> unit
   val size      : cache -> int
   val to_seq    : cache -> (k * v') Seq.t
-  val trim      : cache -> float -> (k * v) list
+  val trim      : cache -> float -> (k * v) list * (unit -> unit)
   val flush     : cache -> (k * v) list
 end
 
@@ -64,12 +64,14 @@ module Make(S:sig
   let to_seq c = Hashtbl.to_seq c.tbl
 
   (* force capacity to pc * max_sz, and return dirty entries *)
+  (* NOTE for concurrency, we should use a lock, otherwise the entries
+     get removed from the cache before they are written to disk *)
   let trim c (pc:float) = 
     let target_sz = pc *. (float_of_int c.max_sz) |> int_of_float in
     assert(target_sz >= 0 && target_sz <= c.max_sz);
     let sz = size c in
     match sz <= target_sz with 
-    | true -> []
+    | true -> [],(fun () -> ())
     | false -> begin
         let n = sz - target_sz in
         (* need to remove n entries *)
@@ -84,19 +86,23 @@ module Make(S:sig
                 | Seq.Nil -> kvs (* impossible? *)
                 | Cons( (k,v'),seq ) -> kont (n-1, seq, (k,v')::kvs))
         in
-        (* remove, and accumulate dirty entries *)
+        (* remove, and accumulate dirty entries; NOTE we don't
+           directly remove because concurrent finds might then observe
+           a missing entry that hasn't been written to disk; instead,
+           we return a function that will do the removal *)
         let dirty = 
           (to_remove,[]) |> iter_k (fun ~k:kont (to_remove,dirty) -> 
               match to_remove with
               | [] -> dirty
               | (k,v')::to_remove -> 
-                Hashtbl.remove c.tbl k;
                 match v'.dirty with
                 | true -> kont (to_remove,(k,v'.v)::dirty)
                 | false -> kont (to_remove,dirty))
         in
-        dirty
+        dirty,(fun () -> to_remove |> List.iter (fun (k,_) -> Hashtbl.remove c.tbl k))
       end
+      
+  
 
   (* mark entries as clean, and return the dirties *)
   let flush c =
@@ -112,7 +118,7 @@ module Make(S:sig
             kont ( (k,v'.v)::xs, seq))
 end
 
-
+(* FIXME not used
 (** Cache for find, insert, delete operations *)
 module Make_map_cache(S:sig type k type v end) = struct
   
@@ -133,3 +139,4 @@ module Make_map_cache(S:sig type k type v end) = struct
   let note_absent c k = add' c k {dirty=false;v=`Absent}
        
 end
+*)
