@@ -13,7 +13,7 @@
 (package 
  (name mini-btree)
  (synopsis "A minimal implementation of a B-tree")
- (depends ocamlfind dune ppx_jane lwt bigstringaf)
+ (depends ocamlfind dune ppx_jane lwt bigstringaf tjr_mmap xxhash sexplib)
 )
 
 

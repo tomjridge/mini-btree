@@ -12,6 +12,9 @@ depends: [
   "ppx_jane"
   "lwt"
   "bigstringaf"
+  "tjr_mmap"
+  "xxhash"
+  "sexplib"
   "odoc" {with-doc}
 ]
 build: [
