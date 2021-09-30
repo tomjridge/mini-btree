@@ -11,8 +11,8 @@ let make_constants ~blk_sz ~k_sz ~v_sz =
   let r_sz = bytes_per_int in
   (* NOTE subtract bytes_per_int for the tag *)
   let constants = { 
-    max_leaf_keys   = (blk_sz - bytes_per_int)/(2*(k_sz+r_sz)); 
-    max_branch_keys = (blk_sz - bytes_per_int)/(2*(k_sz+v_sz)) 
+    max_leaf_keys   = (blk_sz - bytes_per_int)/(k_sz+v_sz); (* FIXME why 2*(..)? *)
+    max_branch_keys = (blk_sz - bytes_per_int)/(k_sz+r_sz) 
   }
   in
   constants

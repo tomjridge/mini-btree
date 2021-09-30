@@ -9,7 +9,7 @@ module Example_int_int_mmap : Make_intf.T with type k=int and type v=int = struc
     type r = int[@@deriving bin_io]
     let k_cmp = {k_cmp=Stdlib.Int.compare}
     let blk_sz = blk_sz_4096
-    let constants = make_constants ~blk_sz ~k_sz:10 ~v_sz:10
+    let constants = make_constants ~blk_sz ~k_sz:10 ~v_sz:10  (* FIXME 10 should be 9 I think *)
   end
 
   module Made = Make_with_mmap_private.Make(S)
