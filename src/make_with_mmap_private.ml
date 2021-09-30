@@ -6,7 +6,7 @@
    remarshalled *)
 (* open Util *)
 open Btree_impl_intf
-
+module Mmap = Tjr_mmap.Mmap
 
 open (struct module Buf = Bigstringaf end)
 
